@@ -660,15 +660,15 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 
 async function sb(table, method='GET', body=null, query='') {
   const url = `${SUPABASE_URL}/rest/v1/${table}${query}`;
-  const opts = {
-    method,
-    headers: {
-      'apikey': SUPABASE_KEY,
-      'Authorization': `Bearer ${SUPABASE_KEY}`,
-      'Content-Type': 'application/json',
-      'Prefer': method==='POST' ? 'return=representation' : (method==='PATCH'||method==='DELETE' ? 'return=representation' : ''),
-    },
+  const headers = {
+    'apikey': SUPABASE_KEY,
+    'Authorization': `Bearer ${SUPABASE_KEY}`,
+    'Content-Type': 'application/json',
   };
+  if (method === 'POST') headers['Prefer'] = 'return=representation';
+  if (method === 'PATCH' || method === 'DELETE') headers['Prefer'] = 'return=representation';
+
+  const opts = { method, headers };
   if (body) opts.body = JSON.stringify(body);
   const res = await fetch(url, opts);
   if (!res.ok) {
@@ -676,7 +676,8 @@ async function sb(table, method='GET', body=null, query='') {
     throw new Error(`Supabase error: ${err}`);
   }
   const text = await res.text();
-  return text ? JSON.parse(text) : [];
+  if (!text || text === '') return [];
+  return JSON.parse(text);
 }
 
 // ══════════════════════════════════════
@@ -822,6 +823,19 @@ async function doLogin() {
 }
 
 function doLogout() {
+  if (clockedInAt) {
+    showToast('Warning: You are still clocked in!', 'error');
+    setTimeout(()=>{
+      if (confirm('You are currently clocked in. Log out anyway?')) {
+        performLogout();
+      }
+    }, 300);
+    return;
+  }
+  performLogout();
+}
+
+function performLogout() {
   currentUser = null; clockedInAt = null;
   if (clockIntervalId) { clearInterval(clockIntervalId); clockIntervalId = null; }
   document.getElementById('app').style.display = 'none';
@@ -882,7 +896,7 @@ function showEmpPage(id) {
   if (el) el.classList.add('active');
 
   if (id==='overview')  renderOverview();
-  if (id==='clock')     { renderClockLog(); startClockTimer(); }
+  if (id==='clock')     { loadClockState(); renderClockLog(); startClockTimer(); }
   if (id==='schedule')  renderMySchedule();
   if (id==='timeoff')   renderTimeOff();
   if (id==='more')      renderMoreMenu();
@@ -1048,8 +1062,13 @@ async function doClock(action) {
       location:  loc,
     };
     try {
-      const saved = await sb('time_entries','POST',entry);
-      const mapped = {...saved[0], userId:saved[0].user_id, clockIn:saved[0].clock_in, clockOut:saved[0].clock_out};
+      await sb('time_entries','POST',entry);
+      const mapped = {
+        ...entry,
+        userId:   entry.user_id,
+        clockIn:  entry.clock_in,
+        clockOut: entry.clock_out,
+      };
       store.timeEntries.unshift(mapped);
     } catch(e) { showToast('Error saving entry: '+e.message,'error'); return; }
     clockedInAt = null;
