@@ -844,6 +844,7 @@ function doLogout() {
 function performLogout() {
   currentUser = null; clockedInAt = null;
   if (clockIntervalId) { clearInterval(clockIntervalId); clockIntervalId = null; }
+  localStorage.removeItem('citadel_session');
   document.getElementById('app').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('login-email').value = '';
@@ -855,6 +856,8 @@ function performLogout() {
 // INIT
 // ══════════════════════════════════════
 function initApp() {
+  // Persist session so page refresh doesn't log out
+  localStorage.setItem('citadel_session', JSON.stringify(currentUser));
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
 
@@ -1639,6 +1642,33 @@ function togglePassword() {
 // ══════════════════════════════════════
 // EVENT WIRING
 // ══════════════════════════════════════
+// ══════════════════════════════════════
+// SESSION RESTORE
+// ══════════════════════════════════════
+(async function restoreSession() {
+  const saved = localStorage.getItem('citadel_session');
+  if (!saved) return;
+  try {
+    const user = JSON.parse(saved);
+    if (!user || !user.id) return;
+    showLoader(true);
+    await loadAllData();
+    // For employees, verify they still exist in the DB
+    if (user.role === 'employee') {
+      const fresh = store.users.find(u => u.id === user.id);
+      if (!fresh) { localStorage.removeItem('citadel_session'); showLoader(false); return; }
+      currentUser = fresh;
+    } else {
+      currentUser = user;
+    }
+    showLoader(false);
+    initApp();
+  } catch(e) {
+    localStorage.removeItem('citadel_session');
+    showLoader(false);
+  }
+})();
+
 document.getElementById('tab-employee').addEventListener('click',()=>setLoginRole('employee'));
 document.getElementById('tab-admin').addEventListener('click',   ()=>setLoginRole('admin'));
 document.getElementById('login-btn').addEventListener('click',   doLogin);
