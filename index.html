@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https://agznogsjlufjvfecjyld.supabase.co; img-src 'self' data:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://agznogsjlufjvfecjyld.supabase.co https://citadelgroupky.github.io; img-src 'self' data:;">
 <title>Citadel Group</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600&family=Barlow+Condensed:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
 <style>
@@ -665,19 +665,25 @@ async function sb(table, method='GET', body=null, query='') {
     'Authorization': `Bearer ${SUPABASE_KEY}`,
     'Content-Type': 'application/json',
   };
-  if (method === 'POST') headers['Prefer'] = 'return=representation';
-  if (method === 'PATCH' || method === 'DELETE') headers['Prefer'] = 'return=representation';
+  if (method === 'POST')   headers['Prefer'] = 'return=representation,resolution=merge-duplicates';
+  if (method === 'PATCH')  headers['Prefer'] = 'return=representation';
+  if (method === 'DELETE') headers['Prefer'] = 'return=representation';
 
   const opts = { method, headers };
   if (body) opts.body = JSON.stringify(body);
   const res = await fetch(url, opts);
+
+  // 204 No Content is a valid success response (e.g. RLS policies that strip the body)
+  if (res.status === 204) return [];
+
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(`Supabase error: ${err}`);
+    throw new Error(err || `HTTP ${res.status}`);
   }
   const text = await res.text();
-  if (!text || text === '') return [];
-  return JSON.parse(text);
+  if (!text || text.trim() === '') return [];
+  try { return JSON.parse(text); }
+  catch(e) { return []; }
 }
 
 // ══════════════════════════════════════
@@ -1051,7 +1057,7 @@ async function doClock(action) {
     if (currentEmpPage === 'overview') renderOverview();
   } else {
     if (!clockedInAt) return;
-    const hrs = Math.round((now.getTime()-clockedInAt.getTime())/36000)/100;
+    const hrs = Math.round((now.getTime() - clockedInAt.getTime()) / 1000 / 36) / 100;
     const loc = localStorage.getItem(clockKey()+'_loc') || '';
     const entry = {
       user_id:   currentUser.id,
@@ -1062,12 +1068,14 @@ async function doClock(action) {
       location:  loc,
     };
     try {
-      await sb('time_entries','POST',entry);
+      const result = await sb('time_entries','POST',entry);
+      // result may be [] if RLS returns 204 — that's fine, the row was still written
+      const saved = result && result[0] ? result[0] : entry;
       const mapped = {
-        ...entry,
-        userId:   entry.user_id,
-        clockIn:  entry.clock_in,
-        clockOut: entry.clock_out,
+        ...saved,
+        userId:   saved.user_id  || entry.user_id,
+        clockIn:  saved.clock_in  || entry.clock_in,
+        clockOut: saved.clock_out || entry.clock_out,
       };
       store.timeEntries.unshift(mapped);
     } catch(e) { showToast('Error saving entry: '+e.message,'error'); return; }
@@ -1537,8 +1545,9 @@ async function saveEmployee() {
       showToast('Email already in use','error'); return;
     }
     try {
-      const saved = await sb('users','POST',{name,email,phone,password:pass,role:'employee',rate});
-      store.users.push(saved[0]);
+      await sb('users','POST',{name,email,phone,password:pass,role:'employee',rate});
+      const freshUsers = await sb('users','GET',null,'?select=*&order=name');
+      store.users = freshUsers;
       closeModal('modal-add-employee');
       renderEmployeeList();
       renderPayrollFilters();
