@@ -238,7 +238,6 @@ tbody td strong{color:var(--white);}
 .add-shift-btn{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--silver-dark);font-size:18px;opacity:0;transition:opacity 0.2s;cursor:pointer;background:none;border:none;width:100%;height:100%;z-index:1;}
 .sch-shift-cell:hover .add-shift-btn{opacity:1;}
 .modal-overlay.open{z-index:500;}
-.modal input[type="time"]{cursor:pointer;z-index:10;position:relative;}
 .week-nav{display:flex;align-items:center;gap:12px;margin-bottom:14px;}
 .week-nav button{background:transparent;border:1px solid var(--border-bright);border-radius:4px;color:var(--silver-light);padding:7px 14px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:1px;transition:all 0.2s;}
 .week-label{font-family:'Barlow Condensed',sans-serif;font-size:13px;letter-spacing:2px;color:var(--chrome);font-weight:600;}
@@ -271,6 +270,13 @@ tbody td strong{color:var(--white);}
 .modal-close{position:absolute;top:14px;right:14px;background:none;border:none;color:var(--silver);font-size:20px;cursor:pointer;}
 .modal-close:hover{color:var(--chrome);}
 .modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:20px;}
+
+/* ── SHIFT TIME SELECTS ── */
+.shift-select-wrap{position:relative;display:block;}
+.shift-sel{width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--border-bright);border-radius:6px;padding:14px 36px 14px 14px;color:var(--white);font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:600;letter-spacing:1px;outline:none;appearance:none;-webkit-appearance:none;cursor:pointer;}
+.shift-sel:focus{border-color:var(--silver-light);background:rgba(255,255,255,0.1);}
+.shift-sel option{background:#1a1a22;color:var(--white);font-size:15px;}
+.shift-sel-arrow{position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--silver-light);font-size:10px;pointer-events:none;line-height:1;}
 
 /* ── MISC ── */
 .empty{text-align:center;padding:40px 20px;color:var(--silver-dark);font-family:'Barlow Condensed',sans-serif;font-size:12px;letter-spacing:2px;}
@@ -641,16 +647,54 @@ tbody td strong{color:var(--white);}
     <button type="button" class="modal-close" id="close-add-shift">&#10005;</button>
     <div class="modal-title">Add Shift</div>
     <div id="modal-shift-info" style="font-family:'Barlow Condensed',sans-serif;font-size:12px;color:var(--silver);letter-spacing:1px;margin-bottom:16px;"></div>
-    <div class="field"><label>Start Time</label>
-      <div style="display:flex;gap:8px;">
-        <select id="shift-start-h" style="flex:1;background:rgba(255,255,255,0.05);border:1px solid var(--border-bright);border-radius:4px;padding:13px 10px;color:var(--white);font-family:'Barlow',sans-serif;font-size:15px;outline:none;-webkit-appearance:none;"><option value="00">12AM</option><option value="01">1AM</option><option value="02">2AM</option><option value="03">3AM</option><option value="04">4AM</option><option value="05">5AM</option><option value="06">6AM</option><option value="07">7AM</option><option value="08">8AM</option><option value="09">9AM</option><option value="10">10AM</option><option value="11">11AM</option><option value="12">12PM</option><option value="13">1PM</option><option value="14">2PM</option><option value="15">3PM</option><option value="16">4PM</option><option value="17">5PM</option><option value="18">6PM</option><option value="19">7PM</option><option value="20">8PM</option><option value="21">9PM</option><option value="22">10PM</option><option value="23">11PM</option></select>
-        <select id="shift-start-m" style="flex:1;background:rgba(255,255,255,0.05);border:1px solid var(--border-bright);border-radius:4px;padding:13px 10px;color:var(--white);font-family:'Barlow',sans-serif;font-size:15px;outline:none;-webkit-appearance:none;"><option value="00">:00</option><option value="15">:15</option><option value="30">:30</option><option value="45">:45</option></select>
+    <div class="field">
+      <label>Start Time</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div class="shift-select-wrap">
+          <select id="shift-start-h" class="shift-sel">
+            <option value="00">12 AM</option><option value="01">1 AM</option><option value="02">2 AM</option>
+            <option value="03">3 AM</option><option value="04">4 AM</option><option value="05">5 AM</option>
+            <option value="06">6 AM</option><option value="07">7 AM</option><option value="08">8 AM</option>
+            <option value="09">9 AM</option><option value="10">10 AM</option><option value="11">11 AM</option>
+            <option value="12">12 PM</option><option value="13">1 PM</option><option value="14">2 PM</option>
+            <option value="15">3 PM</option><option value="16">4 PM</option><option value="17">5 PM</option>
+            <option value="18">6 PM</option><option value="19">7 PM</option><option value="20">8 PM</option>
+            <option value="21">9 PM</option><option value="22">10 PM</option><option value="23">11 PM</option>
+          </select>
+          <span class="shift-sel-arrow">&#9660;</span>
+        </div>
+        <div class="shift-select-wrap">
+          <select id="shift-start-m" class="shift-sel">
+            <option value="00">:00</option><option value="15">:15</option>
+            <option value="30">:30</option><option value="45">:45</option>
+          </select>
+          <span class="shift-sel-arrow">&#9660;</span>
+        </div>
       </div>
     </div>
-    <div class="field"><label>End Time</label>
-      <div style="display:flex;gap:8px;">
-        <select id="shift-end-h" style="flex:1;background:rgba(255,255,255,0.05);border:1px solid var(--border-bright);border-radius:4px;padding:13px 10px;color:var(--white);font-family:'Barlow',sans-serif;font-size:15px;outline:none;-webkit-appearance:none;"><option value="00">12AM</option><option value="01">1AM</option><option value="02">2AM</option><option value="03">3AM</option><option value="04">4AM</option><option value="05">5AM</option><option value="06">6AM</option><option value="07">7AM</option><option value="08">8AM</option><option value="09">9AM</option><option value="10">10AM</option><option value="11">11AM</option><option value="12">12PM</option><option value="13">1PM</option><option value="14">2PM</option><option value="15">3PM</option><option value="16">4PM</option><option value="17">5PM</option><option value="18">6PM</option><option value="19">7PM</option><option value="20">8PM</option><option value="21">9PM</option><option value="22">10PM</option><option value="23">11PM</option></select>
-        <select id="shift-end-m" style="flex:1;background:rgba(255,255,255,0.05);border:1px solid var(--border-bright);border-radius:4px;padding:13px 10px;color:var(--white);font-family:'Barlow',sans-serif;font-size:15px;outline:none;-webkit-appearance:none;"><option value="00">:00</option><option value="15">:15</option><option value="30">:30</option><option value="45">:45</option></select>
+    <div class="field">
+      <label>End Time</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div class="shift-select-wrap">
+          <select id="shift-end-h" class="shift-sel">
+            <option value="00">12 AM</option><option value="01">1 AM</option><option value="02">2 AM</option>
+            <option value="03">3 AM</option><option value="04">4 AM</option><option value="05">5 AM</option>
+            <option value="06">6 AM</option><option value="07">7 AM</option><option value="08">8 AM</option>
+            <option value="09">9 AM</option><option value="10">10 AM</option><option value="11">11 AM</option>
+            <option value="12">12 PM</option><option value="13">1 PM</option><option value="14">2 PM</option>
+            <option value="15">3 PM</option><option value="16">4 PM</option><option value="17">5 PM</option>
+            <option value="18">6 PM</option><option value="19">7 PM</option><option value="20">8 PM</option>
+            <option value="21">9 PM</option><option value="22">10 PM</option><option value="23">11 PM</option>
+          </select>
+          <span class="shift-sel-arrow">&#9660;</span>
+        </div>
+        <div class="shift-select-wrap">
+          <select id="shift-end-m" class="shift-sel">
+            <option value="00">:00</option><option value="15">:15</option>
+            <option value="30">:30</option><option value="45">:45</option>
+          </select>
+          <span class="shift-sel-arrow">&#9660;</span>
+        </div>
       </div>
     </div>
     <div class="field"><label>Location</label><select id="shift-location"></select></div>
