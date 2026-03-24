@@ -641,8 +641,18 @@ tbody td strong{color:var(--white);}
     <button type="button" class="modal-close" id="close-add-shift">&#10005;</button>
     <div class="modal-title">Add Shift</div>
     <div id="modal-shift-info" style="font-family:'Barlow Condensed',sans-serif;font-size:12px;color:var(--silver);letter-spacing:1px;margin-bottom:16px;"></div>
-    <div class="field"><label>Start Time</label><input type="time" id="shift-start"/></div>
-    <div class="field"><label>End Time</label><input type="time" id="shift-end"/></div>
+    <div class="field"><label>Start Time</label>
+      <div style="display:flex;gap:8px;">
+        <select id="shift-start-h" style="flex:1;background:rgba(255,255,255,0.05);border:1px solid var(--border-bright);border-radius:4px;padding:13px 10px;color:var(--white);font-family:'Barlow',sans-serif;font-size:15px;outline:none;-webkit-appearance:none;"><option value="00">12AM</option><option value="01">1AM</option><option value="02">2AM</option><option value="03">3AM</option><option value="04">4AM</option><option value="05">5AM</option><option value="06">6AM</option><option value="07">7AM</option><option value="08">8AM</option><option value="09">9AM</option><option value="10">10AM</option><option value="11">11AM</option><option value="12">12PM</option><option value="13">1PM</option><option value="14">2PM</option><option value="15">3PM</option><option value="16">4PM</option><option value="17">5PM</option><option value="18">6PM</option><option value="19">7PM</option><option value="20">8PM</option><option value="21">9PM</option><option value="22">10PM</option><option value="23">11PM</option></select>
+        <select id="shift-start-m" style="flex:1;background:rgba(255,255,255,0.05);border:1px solid var(--border-bright);border-radius:4px;padding:13px 10px;color:var(--white);font-family:'Barlow',sans-serif;font-size:15px;outline:none;-webkit-appearance:none;"><option value="00">:00</option><option value="15">:15</option><option value="30">:30</option><option value="45">:45</option></select>
+      </div>
+    </div>
+    <div class="field"><label>End Time</label>
+      <div style="display:flex;gap:8px;">
+        <select id="shift-end-h" style="flex:1;background:rgba(255,255,255,0.05);border:1px solid var(--border-bright);border-radius:4px;padding:13px 10px;color:var(--white);font-family:'Barlow',sans-serif;font-size:15px;outline:none;-webkit-appearance:none;"><option value="00">12AM</option><option value="01">1AM</option><option value="02">2AM</option><option value="03">3AM</option><option value="04">4AM</option><option value="05">5AM</option><option value="06">6AM</option><option value="07">7AM</option><option value="08">8AM</option><option value="09">9AM</option><option value="10">10AM</option><option value="11">11AM</option><option value="12">12PM</option><option value="13">1PM</option><option value="14">2PM</option><option value="15">3PM</option><option value="16">4PM</option><option value="17">5PM</option><option value="18">6PM</option><option value="19">7PM</option><option value="20">8PM</option><option value="21">9PM</option><option value="22">10PM</option><option value="23">11PM</option></select>
+        <select id="shift-end-m" style="flex:1;background:rgba(255,255,255,0.05);border:1px solid var(--border-bright);border-radius:4px;padding:13px 10px;color:var(--white);font-family:'Barlow',sans-serif;font-size:15px;outline:none;-webkit-appearance:none;"><option value="00">:00</option><option value="15">:15</option><option value="30">:30</option><option value="45">:45</option></select>
+      </div>
+    </div>
     <div class="field"><label>Location</label><select id="shift-location"></select></div>
     <div class="modal-footer">
       <button type="button" class="btn btn-outline btn-sm" id="cancel-add-shift">CANCEL</button>
@@ -1399,8 +1409,12 @@ function openAddShift(userId, date) {
 
 async function saveShift() {
   if (!pendingShift) return;
-  const start=document.getElementById('shift-start').value;
-  const end  =document.getElementById('shift-end').value;
+  const startH=document.getElementById('shift-start-h').value;
+  const startM=document.getElementById('shift-start-m').value;
+  const endH  =document.getElementById('shift-end-h').value;
+  const endM  =document.getElementById('shift-end-m').value;
+  const start = startH+':'+startM;
+  const end   = endH+':'+endM;
   const loc  =document.getElementById('shift-location').value;
   if (!start||!end){showToast('Enter start and end time','error');return;}
   try {
