@@ -235,8 +235,10 @@ tbody td strong{color:var(--white);}
 .shift-loc{color:var(--silver);font-size:9px;margin-top:1px;}
 .del-shift{position:absolute;top:2px;right:3px;background:none;border:none;color:var(--danger-light);cursor:pointer;font-size:11px;display:none;}
 .shift-block:hover .del-shift{display:block;}
-.add-shift-btn{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--silver-dark);font-size:18px;opacity:0;transition:opacity 0.2s;cursor:pointer;background:none;border:none;width:100%;height:100%;}
+.add-shift-btn{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--silver-dark);font-size:18px;opacity:0;transition:opacity 0.2s;cursor:pointer;background:none;border:none;width:100%;height:100%;z-index:1;}
 .sch-shift-cell:hover .add-shift-btn{opacity:1;}
+.modal-overlay.open{z-index:500;}
+.modal input[type="time"]{cursor:pointer;z-index:10;position:relative;}
 .week-nav{display:flex;align-items:center;gap:12px;margin-bottom:14px;}
 .week-nav button{background:transparent;border:1px solid var(--border-bright);border-radius:4px;color:var(--silver-light);padding:7px 14px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:1px;transition:all 0.2s;}
 .week-label{font-family:'Barlow Condensed',sans-serif;font-size:13px;letter-spacing:2px;color:var(--chrome);font-weight:600;}
@@ -1272,15 +1274,23 @@ function incHtml(i, showUser) {
 // ══════════════════════════════════════
 // ADMIN DASHBOARD
 // ══════════════════════════════════════
+function toHHMM(decimal) {
+  const h = Math.floor(decimal);
+  const m = Math.round((decimal - h) * 60);
+  return `${h}h ${String(m).padStart(2,'0')}m`;
+}
 function renderAdminDash() {
   const totalEmp = store.users.filter(u=>u.role==='employee').length;
   const hrsToday = store.timeEntries.filter(e=>e.date===today()).reduce((s,e)=>s+parseFloat(e.hours||0),0);
+  const ppStart = document.getElementById('payroll-from') ? document.getElementById('payroll-from').value : '';
+  const ppEnd   = document.getElementById('payroll-to')   ? document.getElementById('payroll-to').value   : '';
+  const hrsPayPeriod = store.timeEntries.filter(e=>(!ppStart||e.date>=ppStart)&&(!ppEnd||e.date<=ppEnd)&&e.hours).reduce((s,e)=>s+parseFloat(e.hours||0),0);
   const highInc  = store.incidents.filter(i=>i.severity==='High').length;
   const pendingTO= store.timeOffRequests.filter(r=>r.status==='Pending').length;
 
   document.getElementById('admin-stats').innerHTML = [
     ['Total Employees', totalEmp, 'var(--chrome)'],
-    ['Hours Today', hrsToday.toFixed(2), 'var(--chrome)'],
+    ['Pay Period Hours', hrsPayPeriod.toFixed(2), 'var(--chrome)'],
     ['High Incidents', highInc, 'var(--danger-light)'],
     ['Time Off Pending', pendingTO, 'var(--gold-light)'],
   ].map(([lbl,val,color])=>`
@@ -1430,8 +1440,8 @@ function renderPayroll() {
     const hrs=parseFloat(e.hours||0);
     const pay=hrs*(u?.rate||0);
     tH+=hrs; tP+=pay;
-    return `<tr><td><strong>${u?.name||'?'}</strong></td><td>${formatDate(e.date)}</td><td>${e.clockIn}</td><td>${e.clockOut||'—'}</td><td><strong>${hrs.toFixed(2)}</strong></td><td>$${(u?.rate||0).toFixed(2)}/hr</td><td><strong>$${pay.toFixed(2)}</strong></td></tr>`;
-  }).join('')+`<tr class="pay-total"><td colspan="4">TOTALS</td><td>${tH.toFixed(2)} hrs</td><td>—</td><td>$${tP.toFixed(2)}</td></tr>`;
+    return `<tr><td><strong>${u?.name||'?'}</strong></td><td>${formatDate(e.date)}</td><td>${e.clockIn}</td><td>${e.clockOut||'—'}</td><td><strong>${hrs.toFixed(2)}</strong><br><span style="font-size:11px;color:var(--silver);">${toHHMM(hrs)}</span></td><td>$${(u?.rate||0).toFixed(2)}/hr</td><td><strong>$${pay.toFixed(2)}</strong></td></tr>`;
+  }).join('')+`<tr class="pay-total"><td colspan="4">TOTALS</td><td><strong>${tH.toFixed(2)}</strong><br><span style="font-size:11px;">${toHHMM(tH)}</span></td><td>—</td><td>$${tP.toFixed(2)}</td></tr>`;
 }
 
 function exportPayroll() {
