@@ -1051,6 +1051,18 @@ async function doClock(action) {
     const locSel = document.getElementById('clock-location-select');
     const loc = locSel ? locSel.value : '';
     if (!loc) { showToast('Please select a location first', 'error'); return; }
+    // Write clock-in row immediately so Who's Clocked In shows live
+    try {
+      const result = await sb('time_entries','POST',{
+        user_id:  currentUser.id,
+        date:     now.toISOString().split('T')[0],
+        clock_in: now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true}),
+      });
+      const saved = result && result[0] ? result[0] : null;
+      if (saved && saved.id) localStorage.setItem(clockKey()+'_rowid', saved.id.toString());
+    } catch(e) {
+      showToast('Error clocking in: '+e.message,'error'); return;
+    }
     clockedInAt = now;
     localStorage.setItem(clockKey(), now.getTime().toString());
     localStorage.setItem(clockKey()+'_loc', loc);
@@ -1061,31 +1073,29 @@ async function doClock(action) {
   } else {
     if (!clockedInAt) return;
     const hrs = Math.round((now.getTime() - clockedInAt.getTime()) / 1000 / 36) / 100;
-    const loc = localStorage.getItem(clockKey()+'_loc') || '';
-    const entry = {
-      user_id:   currentUser.id,
-      date:      clockedInAt.toISOString().split('T')[0],
-      clock_in:  clockedInAt.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true}),
+    const rowId = localStorage.getItem(clockKey()+'_rowid');
+    const updates = {
       clock_out: now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true}),
-      hours:     hrs,
-
+      hours: hrs,
     };
     try {
-      const result = await sb('time_entries','POST',entry);
-      // result may be [] if RLS returns 204 — that's fine, the row was still written
-      const saved = result && result[0] ? result[0] : entry;
-      const mapped = {
-        ...saved,
-        userId:   saved.user_id  || entry.user_id,
-        clockIn:  saved.clock_in  || entry.clock_in,
-        clockOut: saved.clock_out || entry.clock_out,
-        location: saved.site || entry.site,
-      };
-      store.timeEntries.unshift(mapped);
+      if (rowId) {
+        await sb('time_entries','PATCH',updates,`?id=eq.${rowId}`);
+      } else {
+        await sb('time_entries','POST',{
+          user_id:   currentUser.id,
+          date:      clockedInAt.toISOString().split('T')[0],
+          clock_in:  clockedInAt.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true}),
+          ...updates,
+        });
+      }
+      const fresh = await sb('time_entries','GET',null,`?user_id=eq.${currentUser.id}&order=date.desc`);
+      store.timeEntries = fresh.map(e=>({...e, userId:e.user_id, clockIn:e.clock_in, clockOut:e.clock_out}));
     } catch(e) { showToast('Error saving entry: '+e.message,'error'); return; }
     clockedInAt = null;
     localStorage.removeItem(clockKey());
     localStorage.removeItem(clockKey()+'_loc');
+    localStorage.removeItem(clockKey()+'_rowid');
     syncClockUI(false);
     startClockTimer();
     renderClockLog();
@@ -1289,7 +1299,24 @@ function renderAdminDash() {
           <span style="font-size:11px;color:var(--silver);">${i.location}</span>
         </div>`).join('')
     : '<div class="empty" style="padding:16px 0;">No incidents on record.</div>';
-  lower.innerHTML = `<div class="card"><div class="card-title">Recent Incidents</div>${incHtml2}</div>`;
+  lower.innerHTML = `<div class="card" style="margin-bottom:14px;"><div class="card-title">Who's Clocked In</div><div id="admin-clocked-in-list"><div class="empty" style="padding:8px 0;">Loading...</div></div></div><div class="card"><div class="card-title">Recent Incidents</div>${incHtml2}</div>`;
+  // Load clocked-in employees from Supabase
+  sb('time_entries','GET',null,`?date=eq.${today()}&clock_out=is.null&select=*`).then(entries=>{
+    const el = document.getElementById('admin-clocked-in-list');
+    if (!el) return;
+    if (!entries.length) { el.innerHTML='<div class="empty" style="padding:8px 0;">No one is currently clocked in.</div>'; return; }
+    el.innerHTML = entries.map(e=>{
+      const u = store.users.find(u=>u.id===e.user_id);
+      return `<div class="clocked-in-item">
+        <span class="ci-dot"></span>
+        <div class="ci-info"><div class="ci-name">${u?u.name:'Unknown'}</div></div>
+        <div class="ci-time">Since ${e.clock_in}</div>
+      </div>`;
+    }).join('');
+  }).catch(()=>{
+    const el = document.getElementById('admin-clocked-in-list');
+    if (el) el.innerHTML='<div class="empty" style="padding:8px 0;">Could not load.</div>';
+  });
 }
 
 // ══════════════════════════════════════
