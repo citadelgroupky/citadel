@@ -452,9 +452,10 @@ tbody td strong{color:var(--white);}
         <div class="inc-form">
           <div class="card-title">Submit Report</div>
           <div class="field"><label>Title</label><input type="text" id="inc-title" placeholder="Brief description"/></div>
+          <div class="field"><label>Location</label><input type="text" id="inc-location" placeholder="Site / Address"/></div>
           <div class="form-row">
-            <div class="field"><label>Location</label><input type="text" id="inc-location" placeholder="Site / Address"/></div>
-            <div class="field"><label>Date &amp; Time</label><input type="datetime-local" id="inc-datetime"/></div>
+            <div class="field"><label>Time of Incident</label><input type="datetime-local" id="inc-datetime"/></div>
+            <div class="field"><label>End of Incident Time</label><input type="datetime-local" id="inc-datetime-end"/></div>
           </div>
           <div class="field">
             <label>Severity</label>
@@ -495,6 +496,19 @@ tbody td strong{color:var(--white);}
       <div class="page-header"><div class="page-title">Dashboard</div></div>
       <div class="stats-grid" id="admin-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px;"></div>
       <div id="admin-dash-lower"></div>
+      <div class="card" style="margin-top:14px;">
+        <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;">
+          <span>Time Entries</span>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <select id="dash-entries-emp" style="background:rgba(255,255,255,0.05);border:1px solid var(--border-bright);border-radius:4px;padding:5px 8px;color:var(--white);font-family:'Barlow Condensed',sans-serif;font-size:11px;outline:none;"></select>
+            <input type="date" id="dash-entries-date" style="background:rgba(255,255,255,0.05);border:1px solid var(--border-bright);border-radius:4px;padding:5px 8px;color:var(--white);font-family:'Barlow Condensed',sans-serif;font-size:11px;outline:none;"/>
+          </div>
+        </div>
+        <table>
+          <thead><tr><th>Employee</th><th>Date</th><th>In</th><th>Out</th><th>Hrs</th><th></th></tr></thead>
+          <tbody id="dash-entries-tbody"></tbody>
+        </table>
+      </div>
     </div>
 
     <div class="page" id="page-aschedule">
@@ -705,6 +719,31 @@ tbody td strong{color:var(--white);}
   </div>
 </div>
 
+<div class="modal-overlay" id="modal-edit-entry">
+  <div class="modal" style="max-width:380px;">
+    <button type="button" class="modal-close" id="close-edit-entry">&#10005;</button>
+    <div class="modal-title">Edit Time Entry</div>
+    <div id="edit-entry-info" style="font-family:'Barlow Condensed',sans-serif;font-size:12px;color:var(--silver);letter-spacing:1px;margin-bottom:16px;"></div>
+    <div class="field">
+      <label>Clock In Time</label>
+      <input type="text" id="edit-clock-in" placeholder="e.g. 09:00 AM" style="font-family:'Barlow Condensed',sans-serif;letter-spacing:1px;"/>
+    </div>
+    <div class="field">
+      <label>Clock Out Time</label>
+      <input type="text" id="edit-clock-out" placeholder="e.g. 05:00 PM" style="font-family:'Barlow Condensed',sans-serif;letter-spacing:1px;"/>
+    </div>
+    <div class="field">
+      <label>Date</label>
+      <input type="date" id="edit-entry-date"/>
+    </div>
+    <p style="font-size:11px;color:var(--silver-dark);margin-top:-8px;margin-bottom:0;">Hours will be recalculated automatically.</p>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-outline btn-sm" id="cancel-edit-entry">CANCEL</button>
+      <button type="button" class="btn btn-chrome btn-sm" id="confirm-edit-entry">SAVE</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -773,8 +812,16 @@ async function loadAllData() {
     store.locations     = locations;
     store.shifts        = shifts.map(s=>({...s, userId:s.user_id, start:s.start_time, end:s.end_time}));
     store.timeEntries   = entries.map(e=>({...e, userId:e.user_id, clockIn:e.clock_in, clockOut:e.clock_out, location:e.site}));
-    store.incidents     = incidents.map(i=>({...i, userId:i.user_id, datetime:i.incident_datetime, desc:i.description, actions:i.actions_taken}));
+    store.incidents     = incidents.map(i=>({...i, userId:i.user_id, datetime:i.incident_datetime, datetimeEnd:i.incident_datetime_end, desc:i.description, actions:i.actions_taken}));
     store.timeOffRequests = timeoff.map(r=>({...r, userId:r.user_id, from:r.from_date, to:r.to_date}));
+    // Auto-remove approved requests whose end date has passed
+    const expiredApproved = store.timeOffRequests.filter(r=>r.status==='Approved' && r.to < today());
+    for (const r of expiredApproved) {
+      try { await sb('time_off_requests','DELETE',null,`?id=eq.${r.id}`); } catch(e) {}
+    }
+    if (expiredApproved.length) {
+      store.timeOffRequests = store.timeOffRequests.filter(r=>!(r.status==='Approved' && r.to < today()));
+    }
     if (settings && settings[0]) {
       const s = settings[0];
       store.settings = { email: s.incident_email||'', payPeriod: s.pay_period||'biweekly', bizName: s.biz_name||'Citadel Group Security Solutions' };
@@ -1286,18 +1333,28 @@ function setSeverity(sev) {
 }
 
 async function submitIncident() {
-  const title    = document.getElementById('inc-title').value.trim();
-  const location = document.getElementById('inc-location').value.trim();
-  const datetime = document.getElementById('inc-datetime').value;
-  const desc     = document.getElementById('inc-desc').value.trim();
-  const actions  = document.getElementById('inc-actions').value.trim();
+  const title       = document.getElementById('inc-title').value.trim();
+  const location    = document.getElementById('inc-location').value.trim();
+  const datetime    = document.getElementById('inc-datetime').value;
+  const datetimeEnd = document.getElementById('inc-datetime-end').value;
+  const desc        = document.getElementById('inc-desc').value.trim();
+  const actions     = document.getElementById('inc-actions').value.trim();
   if (!title||!location||!datetime||!desc||!selectedSev) { showToast('Fill in all fields + severity','error'); return; }
   try {
-    const saved = await sb('incidents','POST',{user_id:currentUser.id,title,location,incident_datetime:datetime,severity:selectedSev,description:desc,actions_taken:actions});
-    const mapped = {...saved[0], userId:saved[0].user_id, datetime:saved[0].incident_datetime, desc:saved[0].description, actions:saved[0].actions_taken};
+    const saved = await sb('incidents','POST',{
+      user_id: currentUser.id,
+      title,
+      location,
+      incident_datetime: datetime,
+      incident_datetime_end: datetimeEnd || null,
+      severity: selectedSev,
+      description: desc,
+      actions_taken: actions
+    });
+    const mapped = {...saved[0], userId:saved[0].user_id, datetime:saved[0].incident_datetime, datetimeEnd:saved[0].incident_datetime_end, desc:saved[0].description, actions:saved[0].actions_taken};
     store.incidents.unshift(mapped);
     showToast('Report submitted','success');
-    ['inc-title','inc-location','inc-datetime','inc-desc','inc-actions'].forEach(id=>document.getElementById(id).value='');
+    ['inc-title','inc-location','inc-datetime','inc-datetime-end','inc-desc','inc-actions'].forEach(id=>document.getElementById(id).value='');
     selectedSev=null;
     ['Low','Medium','High'].forEach(s=>{const b=document.getElementById('sev-'+s);if(b)b.className='sev-btn';});
     renderEmpIncidents();
@@ -1314,11 +1371,18 @@ function renderEmpIncidents() {
 function incHtml(i, showUser) {
   const sc  = i.severity==='Low'?'low':i.severity==='Medium'?'med':'high';
   const dt  = new Date(i.datetime);
+  const dtEnd = i.datetimeEnd ? new Date(i.datetimeEnd) : null;
   const u   = store.users.find(u=>u.id===i.userId);
+  const timeRange = dtEnd
+    ? `${dt.toLocaleDateString('en-US',{month:'short',day:'numeric'})} ${dt.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})} – ${dtEnd.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}`
+    : `${dt.toLocaleDateString('en-US',{month:'short',day:'numeric'})} ${dt.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}`;
   return `<div class="inc-item inc-${sc}">
     <div class="inc-hdr">
-      <div><div class="inc-ttl">${i.title}</div><div class="inc-meta">${i.location} · ${dt.toLocaleDateString('en-US',{month:'short',day:'numeric'})} ${dt.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}${showUser&&u?` · ${u.name}`:''}</div></div>
-      <span class="sev-badge sb-${sc}">${i.severity}</span>
+      <div><div class="inc-ttl">${i.title}</div><div class="inc-meta">${i.location} · ${timeRange}${showUser&&u?` · ${u.name}`:''}</div></div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="sev-badge sb-${sc}">${i.severity}</span>
+        ${showUser?`<button type="button" class="btn btn-danger btn-xs" onclick="deleteIncident(${i.id})">DEL</button>`:''}
+      </div>
     </div>
     <div class="inc-body">${i.desc}</div>
     ${i.actions?`<div class="inc-body" style="margin-top:6px;border-top:1px solid var(--border);padding-top:6px;font-size:11px;color:var(--silver);">ACTIONS: ${i.actions}</div>`:''}
@@ -1381,6 +1445,11 @@ function renderAdminDash() {
     const el = document.getElementById('admin-clocked-in-list');
     if (el) el.innerHTML='<div class="empty" style="padding:8px 0;">Could not load.</div>';
   });
+
+  // Render editable time entries table
+  renderDashEntries();
+  document.getElementById('dash-entries-emp')?.addEventListener('change', renderDashEntries);
+  document.getElementById('dash-entries-date')?.addEventListener('change', renderDashEntries);
 }
 
 // ══════════════════════════════════════
@@ -1573,6 +1642,16 @@ function renderAdminIncidents() {
   list.innerHTML=store.incidents.map(i=>incHtml(i,true)).join('');
 }
 
+async function deleteIncident(id) {
+  if (!confirm('Delete this incident report? This cannot be undone.')) return;
+  try {
+    await sb('incidents','DELETE',null,`?id=eq.${id}`);
+    store.incidents = store.incidents.filter(i=>i.id!==id);
+    renderAdminIncidents();
+    showToast('Incident deleted','success');
+  } catch(e) { showToast('Error: '+e.message,'error'); }
+}
+
 // ══════════════════════════════════════
 // ADMIN PANEL
 // ══════════════════════════════════════
@@ -1737,6 +1816,100 @@ function togglePassword() {
 }
 
 // ══════════════════════════════════════
+// ADMIN — EDIT TIME ENTRIES
+// ══════════════════════════════════════
+let editingEntryId = null;
+
+function renderDashEntries() {
+  const empSel  = document.getElementById('dash-entries-emp');
+  const dateSel = document.getElementById('dash-entries-date');
+  if (!empSel) return;
+
+  // Populate employee filter if empty
+  if (empSel.options.length === 0) {
+    empSel.innerHTML = '<option value="all">All Employees</option>' +
+      store.users.filter(u=>u.role==='employee').map(u=>`<option value="${u.id}">${u.name}</option>`).join('');
+  }
+
+  const empId    = empSel.value;
+  const dateVal  = dateSel.value;
+  let entries = store.timeEntries.slice();
+  if (empId !== 'all') entries = entries.filter(e=>e.userId===parseInt(empId));
+  if (dateVal) entries = entries.filter(e=>e.date===dateVal);
+  entries = entries.slice(0,30); // cap at 30 rows
+
+  const tbody = document.getElementById('dash-entries-tbody');
+  if (!tbody) return;
+  if (!entries.length) { tbody.innerHTML=`<tr><td colspan="6" class="empty">NO ENTRIES</td></tr>`; return; }
+  tbody.innerHTML = entries.map(e=>{
+    const u = store.users.find(u=>u.id===e.userId);
+    const hrs = parseFloat(e.hours||0);
+    return `<tr>
+      <td><strong>${u?.name||'?'}</strong></td>
+      <td>${formatDate(e.date)}</td>
+      <td>${e.clockIn||'—'}</td>
+      <td>${e.clockOut||'<span style="color:var(--success-light)">Active</span>'}</td>
+      <td>${hrs?hrs.toFixed(2):'—'}</td>
+      <td><button type="button" class="btn btn-outline btn-xs" onclick="openEditEntry(${e.id})">EDIT</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function openEditEntry(id) {
+  const e = store.timeEntries.find(e=>e.id===id);
+  if (!e) return;
+  editingEntryId = id;
+  const u = store.users.find(u=>u.id===e.userId);
+  document.getElementById('edit-entry-info').textContent = `${u?.name||'Unknown'} — ${formatDate(e.date)}`;
+  document.getElementById('edit-clock-in').value  = e.clockIn  || '';
+  document.getElementById('edit-clock-out').value = e.clockOut || '';
+  document.getElementById('edit-entry-date').value = e.date    || '';
+  openModal('modal-edit-entry');
+}
+
+function parseTimeToDecimal(timeStr) {
+  // Handles "HH:MM AM/PM" or "HH:MM" formats
+  if (!timeStr) return null;
+  const clean = timeStr.trim().toUpperCase();
+  const match = clean.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/);
+  if (!match) return null;
+  let h = parseInt(match[1]), m = parseInt(match[2]);
+  const period = match[3];
+  if (period === 'PM' && h !== 12) h += 12;
+  if (period === 'AM' && h === 12) h = 0;
+  return h + m / 60;
+}
+
+async function saveEditEntry() {
+  if (!editingEntryId) return;
+  const clockIn  = document.getElementById('edit-clock-in').value.trim();
+  const clockOut = document.getElementById('edit-clock-out').value.trim();
+  const date     = document.getElementById('edit-entry-date').value;
+  if (!clockIn || !date) { showToast('Clock-in time and date are required','error'); return; }
+
+  // Recalculate hours if both times provided
+  let hours = null;
+  if (clockIn && clockOut) {
+    const inDec  = parseTimeToDecimal(clockIn);
+    const outDec = parseTimeToDecimal(clockOut);
+    if (inDec !== null && outDec !== null) {
+      hours = outDec >= inDec ? outDec - inDec : (24 - inDec) + outDec; // handle overnight
+      hours = Math.round(hours * 100) / 100;
+    }
+  }
+
+  const updates = { clock_in: clockIn, clock_out: clockOut || null, date, hours };
+  try {
+    await sb('time_entries','PATCH',updates,`?id=eq.${editingEntryId}`);
+    const e = store.timeEntries.find(e=>e.id===editingEntryId);
+    if (e) { e.clockIn=clockIn; e.clockOut=clockOut||null; e.date=date; e.hours=hours; }
+    closeModal('modal-edit-entry');
+    renderDashEntries();
+    showToast('Entry updated','success');
+  } catch(err) { showToast('Error: '+err.message,'error'); }
+}
+
+// ══════════════════════════════════════
 // EVENT WIRING
 // ══════════════════════════════════════
 // ══════════════════════════════════════
@@ -1806,6 +1979,10 @@ wire('payroll-emp-filter', 'change', renderPayroll);
 wire('payroll-from',       'change', renderPayroll);
 wire('payroll-to',         'change', renderPayroll);
 wire('export-btn',         'click',  exportPayroll);
+
+wire('close-edit-entry',   'click', ()=>closeModal('modal-edit-entry'));
+wire('cancel-edit-entry',  'click', ()=>closeModal('modal-edit-entry'));
+wire('confirm-edit-entry', 'click', saveEditEntry);
 
 wire('atab-employees',   'click', ()=>switchAdminTab('employees'));
 wire('atab-locations',   'click', ()=>switchAdminTab('locations'));
