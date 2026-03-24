@@ -1187,22 +1187,24 @@ function renderCrewList() {
     </div>`).join('');
 }
 
-function renderClockedIn() {
+async function renderClockedIn() {
   const list = document.getElementById('clocked-in-list');
-  const active = store.users.filter(u=>{
-    return u.role==='employee' && localStorage.getItem('citadel_clockIn_'+u.id);
-  });
-  if (!active.length) { list.innerHTML=`<div class="empty">No one is currently clocked in.</div>`; return; }
-  list.innerHTML = active.map(u=>{
-    const ts  = parseInt(localStorage.getItem('citadel_clockIn_'+u.id),10);
-    const sin = new Date(ts).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
-    const shift = store.shifts.find(s=>s.userId===u.id&&s.date===today());
-    return `<div class="clocked-in-item">
-      <span class="ci-dot"></span>
-      <div class="ci-info"><div class="ci-name">${u.name}</div><div class="ci-loc">📍 ${shift?shift.location:'Location unknown'}</div></div>
-      <div class="ci-time">Since ${sin}</div>
-    </div>`;
-  }).join('');
+  list.innerHTML = '<div class="empty">Loading...</div>';
+  try {
+    // Get today's entries with a clock_in but no clock_out
+    const entries = await sb('time_entries','GET',null,`?date=eq.${today()}&clock_out=is.null&select=*`);
+    if (!entries.length) { list.innerHTML=`<div class="empty">No one is currently clocked in.</div>`; return; }
+    list.innerHTML = entries.map(e=>{
+      const u = store.users.find(u=>u.id===e.user_id);
+      return `<div class="clocked-in-item">
+        <span class="ci-dot"></span>
+        <div class="ci-info"><div class="ci-name">${u?u.name:'Unknown'}</div><div class="ci-loc">📍 ${e.site||e.location||'Location unknown'}</div></div>
+        <div class="ci-time">Since ${e.clock_in}</div>
+      </div>`;
+    }).join('');
+  } catch(err) {
+    list.innerHTML = '<div class="empty">Error loading.</div>';
+  }
 }
 
 // ══════════════════════════════════════
