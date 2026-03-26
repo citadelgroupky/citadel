@@ -507,18 +507,21 @@ tbody td strong{color:var(--white);}
       <div class="page-header"><div class="page-title">Dashboard</div></div>
       <div class="stats-grid" id="admin-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px;"></div>
       <div id="admin-dash-lower"></div>
-      <div class="card" style="margin-top:14px;">
-        <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;">
-          <span>Time Entries</span>
-          <div style="display:flex;gap:8px;align-items:center;">
+      <div class="pay-period-block" style="margin-top:14px;">
+        <div class="pay-period-hdr" onclick="toggleTimeEntries()">
+          <span class="pay-period-arrow" id="time-entries-arrow">&#9654;</span>
+          <span class="pay-period-label">Time Entries</span>
+          <div style="display:flex;gap:8px;align-items:center;" onclick="event.stopPropagation()">
             <select id="dash-entries-emp" style="background:rgba(255,255,255,0.05);border:1px solid var(--border-bright);border-radius:4px;padding:5px 8px;color:var(--white);font-family:'Barlow Condensed',sans-serif;font-size:11px;outline:none;"></select>
             <input type="date" id="dash-entries-date" style="background:rgba(255,255,255,0.05);border:1px solid var(--border-bright);border-radius:4px;padding:5px 8px;color:var(--white);font-family:'Barlow Condensed',sans-serif;font-size:11px;outline:none;"/>
           </div>
         </div>
-        <table>
-          <thead><tr><th>Employee</th><th>Date</th><th>In</th><th>Out</th><th>Hrs</th><th></th></tr></thead>
-          <tbody id="dash-entries-tbody"></tbody>
-        </table>
+        <div class="pay-period-body" id="time-entries-body">
+          <table>
+            <thead><tr><th>Employee</th><th>Date</th><th>In</th><th>Out</th><th>Hrs</th><th></th></tr></thead>
+            <tbody id="dash-entries-tbody"></tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -951,6 +954,7 @@ function performLogout() {
   currentUser = null; clockedInAt = null;
   if (clockIntervalId) { clearInterval(clockIntervalId); clockIntervalId = null; }
   localStorage.removeItem('citadel_session');
+  localStorage.removeItem('citadel_page');
   document.getElementById('app').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('login-email').value = '';
@@ -982,14 +986,18 @@ function initApp() {
     bn.className = 'bottom-nav';
     ar.className = 'topbar-row2 visible';
     renderPayrollFilters();
-    showAdminPage('adashboard');
+    const savedPage = localStorage.getItem('citadel_page');
+    const adminPages = ['adashboard','aschedule','apayroll','atimeoff','aincidents','apanel'];
+    showAdminPage(savedPage && adminPages.includes(savedPage) ? savedPage : 'adashboard');
   } else {
     mc.className = 'main-content has-bottom-nav';
     bn.className = 'bottom-nav visible';
     ar.className = 'topbar-row2';
     loadClockState();
     startClockTimer();
-    showEmpPage('overview');
+    const savedPage = localStorage.getItem('citadel_page');
+    const empPages = ['overview','clock','schedule','timeoff','more'];
+    showEmpPage(savedPage && empPages.includes(savedPage) ? savedPage : 'overview');
   }
 }
 
@@ -998,6 +1006,7 @@ function initApp() {
 // ══════════════════════════════════════
 function showEmpPage(id) {
   currentEmpPage = id;
+  localStorage.setItem('citadel_page', id);
   if (id !== 'more') {
     document.getElementById('sub-incidents').style.display = 'none';
     document.getElementById('sub-crew').style.display = 'none';
@@ -1021,6 +1030,7 @@ function showEmpPage(id) {
 // ADMIN NAVIGATION
 // ══════════════════════════════════════
 function showAdminPage(id) {
+  localStorage.setItem('citadel_page', id);
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.admin-nav-btn').forEach(b => b.classList.toggle('active', b.dataset.page===id));
   const el = document.getElementById('page-'+id);
@@ -1654,6 +1664,14 @@ function togglePeriod(id) {
   const body  = document.getElementById(id);
   const hdr   = body?.previousElementSibling;
   const arrow = hdr?.querySelector('.pay-period-arrow');
+  if (!body) return;
+  const isOpen = body.classList.toggle('open');
+  arrow?.classList.toggle('open', isOpen);
+}
+
+function toggleTimeEntries() {
+  const body  = document.getElementById('time-entries-body');
+  const arrow = document.getElementById('time-entries-arrow');
   if (!body) return;
   const isOpen = body.classList.toggle('open');
   arrow?.classList.toggle('open', isOpen);
