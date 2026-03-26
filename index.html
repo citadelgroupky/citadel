@@ -1920,7 +1920,7 @@ async function saveEditEntry() {
   if (!saved) return;
   try {
     const user = JSON.parse(saved);
-    if (!user || !user.id) return;
+    if (!user || user.id === null || user.id === undefined) return;
     showLoader(true);
     await loadAllData();
     // For employees, verify they still exist in the DB
