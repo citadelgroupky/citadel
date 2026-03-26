@@ -532,7 +532,6 @@ tbody td strong{color:var(--white);}
     <div class="page" id="page-apayroll">
       <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;">
         <div><div class="page-title">Payroll</div></div>
-        <button type="button" class="btn btn-outline btn-sm" id="export-btn">&#8595; CSV</button>
       </div>
       <div class="pay-filter" style="margin-bottom:16px;">
         <label>EMPLOYEE</label>
@@ -2069,7 +2068,6 @@ wire('sev-High',   'click', ()=>setSeverity('High'));
 wire('inc-submit', 'click', submitIncident);
 
 wire('payroll-emp-filter', 'change', renderPayroll);
-wire('export-btn',         'click',  exportPayroll);
 
 wire('close-edit-entry',   'click', ()=>closeModal('modal-edit-entry'));
 wire('cancel-edit-entry',  'click', ()=>closeModal('modal-edit-entry'));
