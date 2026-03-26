@@ -1,0 +1,25 @@
+{
+  "name": "Citadel Group Security Solutions",
+  "short_name": "Citadel",
+  "description": "Citadel Group workforce management portal",
+  "start_url": "/citadel/",
+  "scope": "/citadel/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0a0a0c",
+  "theme_color": "#0a0a0c",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
