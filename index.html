@@ -256,6 +256,17 @@ tbody td strong{color:var(--white);}
 .emp-dt{font-size:11px;color:var(--silver);margin-top:2px;}
 .emp-act{display:flex;gap:6px;}
 
+/* ── PAYROLL PERIODS ── */
+.pay-period-block{background:var(--grad-card);border:1px solid var(--border);border-radius:8px;margin-bottom:10px;overflow:hidden;}
+.pay-period-hdr{display:flex;align-items:center;gap:12px;padding:14px 16px;cursor:pointer;user-select:none;transition:background 0.15s;}
+.pay-period-hdr:hover{background:rgba(200,200,220,0.05);}
+.pay-period-arrow{font-size:11px;color:var(--silver);transition:transform 0.2s;flex-shrink:0;}
+.pay-period-arrow.open{transform:rotate(90deg);}
+.pay-period-label{font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:700;color:var(--chrome);letter-spacing:1px;flex:1;}
+.pay-period-summary{font-family:'Barlow Condensed',sans-serif;font-size:11px;color:var(--silver);letter-spacing:1px;text-align:right;white-space:nowrap;}
+.pay-period-body{display:none;border-top:1px solid var(--border);overflow-x:auto;}
+.pay-period-body.open{display:block;}
+
 /* ── PAYROLL FILTER ── */
 .pay-filter{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap;}
 .pay-filter label{font-family:'Barlow Condensed',sans-serif;font-size:10px;letter-spacing:2px;color:var(--silver);font-weight:600;}
@@ -523,18 +534,11 @@ tbody td strong{color:var(--white);}
         <div><div class="page-title">Payroll</div></div>
         <button type="button" class="btn btn-outline btn-sm" id="export-btn">&#8595; CSV</button>
       </div>
-      <div class="pay-filter">
+      <div class="pay-filter" style="margin-bottom:16px;">
         <label>EMPLOYEE</label>
         <select id="payroll-emp-filter"><option value="all">All</option></select>
-        <label>FROM</label><input type="date" id="payroll-from"/>
-        <label>TO</label><input type="date" id="payroll-to"/>
       </div>
-      <div class="card">
-        <table>
-          <thead><tr><th>Employee</th><th>Date</th><th>In</th><th>Out</th><th>Hrs</th><th>Rate</th><th>Pay</th></tr></thead>
-          <tbody id="payroll-tbody"></tbody>
-        </table>
-      </div>
+      <div id="payroll-periods"></div>
     </div>
 
     <div class="page" id="page-atimeoff">
@@ -1544,48 +1548,137 @@ async function saveShift() {
 // PAYROLL
 // ══════════════════════════════════════
 function renderPayrollFilters() {
-  const sel=document.getElementById('payroll-emp-filter');
+  const sel = document.getElementById('payroll-emp-filter');
   if (!sel) return;
-  const emps=store.users.filter(u=>u.role==='employee');
-  sel.innerHTML=`<option value="all">All</option>`+emps.map(e=>`<option value="${e.id}">${e.name}</option>`).join('');
-  const now=new Date(); const from=new Date(now); from.setDate(now.getDate()-14);
-  document.getElementById('payroll-from').value=from.toISOString().split('T')[0];
-  document.getElementById('payroll-to').value=now.toISOString().split('T')[0];
+  const emps = store.users.filter(u=>u.role==='employee');
+  sel.innerHTML = `<option value="all">All</option>` + emps.map(e=>`<option value="${e.id}">${e.name}</option>`).join('');
   renderPayroll();
 }
 
-function renderPayroll() {
-  const empId=document.getElementById('payroll-emp-filter').value;
-  const from =document.getElementById('payroll-from').value;
-  const to   =document.getElementById('payroll-to').value;
-  const entries=store.timeEntries.filter(e=>(empId==='all'||e.userId===parseInt(empId))&&(!from||e.date>=from)&&(!to||e.date<=to));
-  const tbody=document.getElementById('payroll-tbody');
-  if (!entries.length){tbody.innerHTML=`<tr><td colspan="7" class="empty">NO RECORDS</td></tr>`;return;}
-  let tH=0,tP=0;
-  tbody.innerHTML=entries.map(e=>{
-    const u=store.users.find(u=>u.id===e.userId);
-    const hrs=parseFloat(e.hours||0);
-    const pay=hrs*(u?.rate||0);
-    tH+=hrs; tP+=pay;
-    return `<tr><td><strong>${u?.name||'?'}</strong></td><td>${formatDate(e.date)}</td><td>${e.clockIn}</td><td>${e.clockOut||'—'}</td><td><strong>${hrs.toFixed(2)}</strong><br><span style="font-size:11px;color:var(--silver);">${toHHMM(hrs)}</span></td><td>$${(u?.rate||0).toFixed(2)}/hr</td><td><strong>$${pay.toFixed(2)}</strong></td></tr>`;
-  }).join('')+`<tr class="pay-total"><td colspan="4">TOTALS</td><td><strong>${tH.toFixed(2)}</strong><br><span style="font-size:11px;">${toHHMM(tH)}</span></td><td>—</td><td>$${tP.toFixed(2)}</td></tr>`;
+// Generate pay period date ranges going back ~6 months
+function getPayPeriods() {
+  const pp = store.settings.payPeriod || 'biweekly';
+  const periodDays = pp==='weekly'?7:pp==='biweekly'?14:pp==='monthly'?30:15;
+  const now = new Date();
+  const periods = [];
+
+  // Find the start of the current period
+  // Anchor to a fixed reference date (Jan 6 2025 = a known Monday/biweekly start)
+  const anchor = new Date('2025-01-06');
+  const msSinceAnchor = now - anchor;
+  const daysSinceAnchor = Math.floor(msSinceAnchor / 86400000);
+  const currentPeriodIndex = Math.floor(daysSinceAnchor / periodDays);
+
+  // Generate last 12 periods
+  for (let i = 0; i < 12; i++) {
+    const idx = currentPeriodIndex - i;
+    const start = new Date(anchor);
+    start.setDate(anchor.getDate() + idx * periodDays);
+    const end = new Date(start);
+    end.setDate(start.getDate() + periodDays - 1);
+    periods.push({
+      from: start.toISOString().split('T')[0],
+      to:   end.toISOString().split('T')[0],
+      current: i === 0
+    });
+  }
+  return periods;
 }
 
-function exportPayroll() {
-  const empId=document.getElementById('payroll-emp-filter').value;
-  const from =document.getElementById('payroll-from').value;
-  const to   =document.getElementById('payroll-to').value;
-  const entries=store.timeEntries.filter(e=>(empId==='all'||e.userId===parseInt(empId))&&(!from||e.date>=from)&&(!to||e.date<=to));
-  let csv='Employee,Date,Clock In,Clock Out,Hours,Rate,Pay\n';
-  entries.forEach(e=>{
-    const u=store.users.find(u=>u.id===e.userId);
-    const hrs=parseFloat(e.hours||0);
-    const pay=hrs*(u?.rate||0);
-    csv+=`"${u?.name}","${e.date}","${e.clockIn}","${e.clockOut||''}","${hrs.toFixed(2)}","${(u?.rate||0).toFixed(2)}","${pay.toFixed(2)}"\n`;
+function renderPayroll() {
+  const empId   = document.getElementById('payroll-emp-filter').value;
+  const cont    = document.getElementById('payroll-periods');
+  if (!cont) return;
+
+  const periods = getPayPeriods();
+  // Only show periods that have at least one entry (or current period)
+  const allEntries = store.timeEntries.filter(e => empId==='all' || e.userId===parseInt(empId));
+
+  let html = '';
+  let hasAny = false;
+
+  periods.forEach((period, idx) => {
+    const entries = allEntries.filter(e => e.date >= period.from && e.date <= period.to);
+    if (!entries.length && !period.current) return;
+    hasAny = true;
+
+    let tH = 0, tP = 0;
+    entries.forEach(e => {
+      tH += parseFloat(e.hours||0);
+      const u = store.users.find(u=>u.id===e.userId);
+      tP += parseFloat(e.hours||0) * (u?.rate||0);
+    });
+
+    const isOpen = period.current;
+    const periodId = `period-${idx}`;
+    const label = `${formatDate(period.from)} – ${formatDate(period.to)}${period.current?' (Current)':''}`;
+    const summary = entries.length
+      ? `${tH.toFixed(2)} hrs · $${tP.toFixed(2)}`
+      : `No entries`;
+
+    const rowsHtml = entries.length ? entries.map(e => {
+      const u = store.users.find(u=>u.id===e.userId);
+      const hrs = parseFloat(e.hours||0);
+      const pay = hrs * (u?.rate||0);
+      return `<tr>
+        <td><strong>${u?.name||'?'}</strong></td>
+        <td>${formatDate(e.date)}</td>
+        <td>${e.clockIn||'—'}</td>
+        <td>${e.clockOut||'—'}</td>
+        <td><strong>${hrs.toFixed(2)}</strong><br><span style="font-size:11px;color:var(--silver);">${toHHMM(hrs)}</span></td>
+        <td>$${(u?.rate||0).toFixed(2)}/hr</td>
+        <td><strong>$${pay.toFixed(2)}</strong></td>
+      </tr>`;
+    }).join('') + `<tr class="pay-total"><td colspan="4">TOTALS</td><td><strong>${tH.toFixed(2)}</strong><br><span style="font-size:11px;">${toHHMM(tH)}</span></td><td>—</td><td>$${tP.toFixed(2)}</td></tr>`
+    : `<tr><td colspan="7" class="empty">No entries this period</td></tr>`;
+
+    html += `
+      <div class="pay-period-block">
+        <div class="pay-period-hdr" onclick="togglePeriod('${periodId}')">
+          <span class="pay-period-arrow${isOpen?' open':''}">&#9654;</span>
+          <span class="pay-period-label">${label}</span>
+          <span class="pay-period-summary">${summary}</span>
+        </div>
+        <div class="pay-period-body${isOpen?' open':''}" id="${periodId}">
+          <table>
+            <thead><tr><th>Employee</th><th>Date</th><th>In</th><th>Out</th><th>Hrs</th><th>Rate</th><th>Pay</th></tr></thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+        </div>
+      </div>`;
   });
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
-  a.download='citadel-payroll.csv'; a.click();
+
+  cont.innerHTML = hasAny ? html : `<div class="empty">No payroll records found.</div>`;
+}
+
+function togglePeriod(id) {
+  const body  = document.getElementById(id);
+  const hdr   = body?.previousElementSibling;
+  const arrow = hdr?.querySelector('.pay-period-arrow');
+  if (!body) return;
+  const isOpen = body.classList.toggle('open');
+  arrow?.classList.toggle('open', isOpen);
+}
+
+
+function exportPayroll() {
+  const empId = document.getElementById('payroll-emp-filter').value;
+  const periods = getPayPeriods();
+  const allEntries = store.timeEntries.filter(e => empId==='all' || e.userId===parseInt(empId));
+  // Export all entries that fall within any of the generated periods
+  const from = periods[periods.length-1].from;
+  const to   = periods[0].to;
+  const entries = allEntries.filter(e => e.date >= from && e.date <= to);
+  let csv = 'Employee,Date,Clock In,Clock Out,Hours,Rate,Pay\n';
+  entries.forEach(e => {
+    const u = store.users.find(u=>u.id===e.userId);
+    const hrs = parseFloat(e.hours||0);
+    const pay = hrs*(u?.rate||0);
+    csv += `"${u?.name}","${e.date}","${e.clockIn}","${e.clockOut||''}","${hrs.toFixed(2)}","${(u?.rate||0).toFixed(2)}","${pay.toFixed(2)}"\n`;
+  });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download = 'citadel-payroll.csv'; a.click();
 }
 
 // ══════════════════════════════════════
@@ -1976,8 +2069,6 @@ wire('sev-High',   'click', ()=>setSeverity('High'));
 wire('inc-submit', 'click', submitIncident);
 
 wire('payroll-emp-filter', 'change', renderPayroll);
-wire('payroll-from',       'change', renderPayroll);
-wire('payroll-to',         'change', renderPayroll);
 wire('export-btn',         'click',  exportPayroll);
 
 wire('close-edit-entry',   'click', ()=>closeModal('modal-edit-entry'));
