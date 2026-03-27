@@ -287,7 +287,7 @@ tbody td strong{color:var(--white);}
 /* ── MODAL ── */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.8);backdrop-filter:blur(4px);z-index:300;display:none;align-items:center;justify-content:center;}
 .modal-overlay.open{display:flex;}
-.modal{background:var(--grad-card);border:1px solid var(--border-bright);border-radius:10px;padding:28px;width:400px;max-width:95vw;max-height:90vh;overflow-y:auto;position:relative;box-shadow:0 40px 80px rgba(0,0,0,0.8);animation:fadeUp 0.2s ease;}
+.modal{background:var(--grad-card);border:1px solid var(--border-bright);border-radius:10px;padding:28px;width:400px;max-width:95vw;max-height:92vh;overflow-y:auto;position:relative;box-shadow:0 40px 80px rgba(0,0,0,0.8);animation:fadeUp 0.2s ease;}
 .modal-title{font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:700;letter-spacing:3px;color:var(--chrome);text-transform:uppercase;margin-bottom:20px;padding-bottom:12px;border-bottom:1px solid var(--border);}
 .modal-close{position:absolute;top:14px;right:14px;background:none;border:none;color:var(--silver);font-size:20px;cursor:pointer;}
 .modal-close:hover{color:var(--chrome);}
@@ -732,66 +732,38 @@ tbody td strong{color:var(--white);}
 </div>
 
 <div class="modal-overlay" id="modal-edit-shift">
-  <div class="modal" style="padding:20px;">
+  <div class="modal" style="max-width:340px;padding:24px;">
     <button type="button" class="modal-close" id="close-edit-shift">&#10005;</button>
-    <div class="modal-title" style="margin-bottom:12px;padding-bottom:10px;">Edit Shift</div>
-    <div id="edit-shift-info" style="font-family:'Barlow Condensed',sans-serif;font-size:12px;color:var(--silver);letter-spacing:1px;margin-bottom:12px;"></div>
+    <div class="modal-title" style="margin-bottom:10px;padding-bottom:10px;font-size:15px;">Edit Shift</div>
+    <div id="edit-shift-info" style="font-family:'Barlow Condensed',sans-serif;font-size:12px;color:var(--silver);letter-spacing:1px;margin-bottom:14px;"></div>
     <div class="field" style="margin-bottom:10px;">
       <label>Start Time</label>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-        <div class="shift-select-wrap">
-          <select id="edit-shift-start-h" class="shift-sel" style="padding:10px 36px 10px 12px;">
-            <option value="00">12 AM</option><option value="01">1 AM</option><option value="02">2 AM</option>
-            <option value="03">3 AM</option><option value="04">4 AM</option><option value="05">5 AM</option>
-            <option value="06">6 AM</option><option value="07">7 AM</option><option value="08">8 AM</option>
-            <option value="09">9 AM</option><option value="10">10 AM</option><option value="11">11 AM</option>
-            <option value="12">12 PM</option><option value="13">1 PM</option><option value="14">2 PM</option>
-            <option value="15">3 PM</option><option value="16">4 PM</option><option value="17">5 PM</option>
-            <option value="18">6 PM</option><option value="19">7 PM</option><option value="20">8 PM</option>
-            <option value="21">9 PM</option><option value="22">10 PM</option><option value="23">11 PM</option>
-          </select>
-          <span class="shift-sel-arrow">&#9660;</span>
-        </div>
-        <div class="shift-select-wrap">
-          <select id="edit-shift-start-m" class="shift-sel" style="padding:10px 36px 10px 12px;">
-            <option value="00">:00</option><option value="15">:15</option>
-            <option value="30">:30</option><option value="45">:45</option>
-          </select>
-          <span class="shift-sel-arrow">&#9660;</span>
-        </div>
+        <div class="shift-select-wrap"><select id="edit-shift-start-h" class="shift-sel" style="padding:10px 32px 10px 10px;font-size:14px;">
+          <option value="00">12 AM</option><option value="01">1 AM</option><option value="02">2 AM</option><option value="03">3 AM</option><option value="04">4 AM</option><option value="05">5 AM</option><option value="06">6 AM</option><option value="07">7 AM</option><option value="08">8 AM</option><option value="09">9 AM</option><option value="10">10 AM</option><option value="11">11 AM</option><option value="12">12 PM</option><option value="13">1 PM</option><option value="14">2 PM</option><option value="15">3 PM</option><option value="16">4 PM</option><option value="17">5 PM</option><option value="18">6 PM</option><option value="19">7 PM</option><option value="20">8 PM</option><option value="21">9 PM</option><option value="22">10 PM</option><option value="23">11 PM</option>
+        </select><span class="shift-sel-arrow">&#9660;</span></div>
+        <div class="shift-select-wrap"><select id="edit-shift-start-m" class="shift-sel" style="padding:10px 32px 10px 10px;font-size:14px;">
+          <option value="00">:00</option><option value="15">:15</option><option value="30">:30</option><option value="45">:45</option>
+        </select><span class="shift-sel-arrow">&#9660;</span></div>
       </div>
     </div>
     <div class="field" style="margin-bottom:10px;">
       <label>End Time</label>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-        <div class="shift-select-wrap">
-          <select id="edit-shift-end-h" class="shift-sel" style="padding:10px 36px 10px 12px;">
-            <option value="00">12 AM</option><option value="01">1 AM</option><option value="02">2 AM</option>
-            <option value="03">3 AM</option><option value="04">4 AM</option><option value="05">5 AM</option>
-            <option value="06">6 AM</option><option value="07">7 AM</option><option value="08">8 AM</option>
-            <option value="09">9 AM</option><option value="10">10 AM</option><option value="11">11 AM</option>
-            <option value="12">12 PM</option><option value="13">1 PM</option><option value="14">2 PM</option>
-            <option value="15">3 PM</option><option value="16">4 PM</option><option value="17">5 PM</option>
-            <option value="18">6 PM</option><option value="19">7 PM</option><option value="20">8 PM</option>
-            <option value="21">9 PM</option><option value="22">10 PM</option><option value="23">11 PM</option>
-          </select>
-          <span class="shift-sel-arrow">&#9660;</span>
-        </div>
-        <div class="shift-select-wrap">
-          <select id="edit-shift-end-m" class="shift-sel" style="padding:10px 36px 10px 12px;">
-            <option value="00">:00</option><option value="15">:15</option>
-            <option value="30">:30</option><option value="45">:45</option>
-          </select>
-          <span class="shift-sel-arrow">&#9660;</span>
-        </div>
+        <div class="shift-select-wrap"><select id="edit-shift-end-h" class="shift-sel" style="padding:10px 32px 10px 10px;font-size:14px;">
+          <option value="00">12 AM</option><option value="01">1 AM</option><option value="02">2 AM</option><option value="03">3 AM</option><option value="04">4 AM</option><option value="05">5 AM</option><option value="06">6 AM</option><option value="07">7 AM</option><option value="08">8 AM</option><option value="09">9 AM</option><option value="10">10 AM</option><option value="11">11 AM</option><option value="12">12 PM</option><option value="13">1 PM</option><option value="14">2 PM</option><option value="15">3 PM</option><option value="16">4 PM</option><option value="17">5 PM</option><option value="18">6 PM</option><option value="19">7 PM</option><option value="20">8 PM</option><option value="21">9 PM</option><option value="22">10 PM</option><option value="23">11 PM</option>
+        </select><span class="shift-sel-arrow">&#9660;</span></div>
+        <div class="shift-select-wrap"><select id="edit-shift-end-m" class="shift-sel" style="padding:10px 32px 10px 10px;font-size:14px;">
+          <option value="00">:00</option><option value="15">:15</option><option value="30">:30</option><option value="45">:45</option>
+        </select><span class="shift-sel-arrow">&#9660;</span></div>
       </div>
     </div>
-    <div class="field" style="margin-bottom:16px;"><label>Location</label><select id="edit-shift-location"></select></div>
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:8px;">
-      <button type="button" class="btn btn-outline btn-sm" id="cancel-edit-shift">CANCEL</button>
-      <button type="button" class="btn btn-chrome btn-sm" id="confirm-edit-shift">SAVE</button>
+    <div class="field" style="margin-bottom:16px;"><label>Location</label><select id="edit-shift-location" style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--border-bright);border-radius:6px;padding:10px 12px;color:var(--white);font-family:'Barlow Condensed',sans-serif;font-size:14px;outline:none;appearance:none;-webkit-appearance:none;"></select></div>
+    <button type="button" class="btn btn-danger" style="width:100%;margin-bottom:8px;" id="delete-edit-shift">🗑 DELETE SHIFT</button>
+    <div style="display:flex;gap:8px;">
+      <button type="button" class="btn btn-outline" style="flex:1;" id="cancel-edit-shift">CANCEL</button>
+      <button type="button" class="btn btn-chrome" style="flex:1;" id="confirm-edit-shift">SAVE</button>
     </div>
-    <button type="button" class="btn btn-danger" style="width:100%;" id="delete-edit-shift">DELETE SHIFT</button>
   </div>
 </div>
 
