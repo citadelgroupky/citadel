@@ -357,6 +357,7 @@ tbody td strong{color:var(--white);}
       <button type="button" class="admin-nav-btn" data-page="adashboard">DASHBOARD</button>
       <button type="button" class="admin-nav-btn" data-page="aschedule">SCHEDULE</button>
       <button type="button" class="admin-nav-btn" data-page="apayroll">PAYROLL</button>
+      <button type="button" class="admin-nav-btn" data-page="aentries">TIME ENTRIES</button>
       <button type="button" class="admin-nav-btn" data-page="atimeoff">TIME OFF</button>
       <button type="button" class="admin-nav-btn" data-page="aincidents">INCIDENTS</button>
       <button type="button" class="admin-nav-btn" data-page="apanel">ADMIN</button>
@@ -513,21 +514,19 @@ tbody td strong{color:var(--white);}
       <div class="page-header"><div class="page-title">Dashboard</div></div>
       <div class="stats-grid" id="admin-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px;"></div>
       <div id="admin-dash-lower"></div>
-      <div class="pay-period-block" style="margin-top:14px;">
-        <div class="pay-period-hdr" onclick="toggleTimeEntries()">
-          <span class="pay-period-arrow" id="time-entries-arrow">&#9654;</span>
-          <span class="pay-period-label">Time Entries</span>
-          <div style="display:flex;gap:8px;align-items:center;" onclick="event.stopPropagation()">
-            <select id="dash-entries-emp" style="background:rgba(255,255,255,0.05);border:1px solid var(--border-bright);border-radius:4px;padding:5px 8px;color:var(--white);font-family:'Barlow Condensed',sans-serif;font-size:11px;outline:none;"></select>
-            <input type="date" id="dash-entries-date" style="background:rgba(255,255,255,0.05);border:1px solid var(--border-bright);border-radius:4px;padding:5px 8px;color:var(--white);font-family:'Barlow Condensed',sans-serif;font-size:11px;outline:none;"/>
-          </div>
-        </div>
-        <div class="pay-period-body" id="time-entries-body">
-          <table>
-            <thead><tr><th>Employee</th><th>Date</th><th>In</th><th>Out</th><th>Hrs</th><th></th></tr></thead>
-            <tbody id="dash-entries-tbody"></tbody>
-          </table>
-        </div>
+    </div>
+
+    <div class="page" id="page-aentries">
+      <div class="page-header"><div class="page-title">Time Entries</div></div>
+      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+        <select id="dash-entries-emp" style="background:rgba(255,255,255,0.05);border:1px solid var(--border-bright);border-radius:4px;padding:8px 10px;color:var(--white);font-family:'Barlow Condensed',sans-serif;font-size:13px;outline:none;"></select>
+        <input type="date" id="dash-entries-date" style="background:rgba(255,255,255,0.05);border:1px solid var(--border-bright);border-radius:4px;padding:8px 10px;color:var(--white);font-family:'Barlow Condensed',sans-serif;font-size:13px;outline:none;"/>
+      </div>
+      <div class="card">
+        <table>
+          <thead><tr><th>Employee</th><th>Date</th><th>In</th><th>Out</th><th>Hrs</th><th></th></tr></thead>
+          <tbody id="dash-entries-tbody"></tbody>
+        </table>
       </div>
     </div>
 
@@ -784,8 +783,9 @@ tbody td strong{color:var(--white);}
       <label>Date</label>
       <input type="date" id="edit-entry-date"/>
     </div>
-    <p style="font-size:11px;color:var(--silver-dark);margin-top:-8px;margin-bottom:0;">Hours will be recalculated automatically.</p>
-    <div class="modal-footer">
+    <p style="font-size:11px;color:var(--silver-dark);margin-top:-8px;margin-bottom:12px;">Hours will be recalculated automatically.</p>
+    <button type="button" class="btn btn-danger" style="width:100%;margin-bottom:8px;" id="delete-edit-entry">🗑 DELETE ENTRY</button>
+    <div class="modal-footer" style="margin-top:0;">
       <button type="button" class="btn btn-outline btn-sm" id="cancel-edit-entry">CANCEL</button>
       <button type="button" class="btn btn-chrome btn-sm" id="confirm-edit-entry">SAVE</button>
     </div>
@@ -1029,7 +1029,7 @@ function initApp() {
     ar.className = 'topbar-row2 visible';
     renderPayrollFilters();
     const savedPage = localStorage.getItem('citadel_page');
-    const adminPages = ['adashboard','aschedule','apayroll','atimeoff','aincidents','apanel'];
+    const adminPages = ['adashboard','aschedule','apayroll','aentries','atimeoff','aincidents','apanel'];
     showAdminPage(savedPage && adminPages.includes(savedPage) ? savedPage : 'adashboard');
   } else {
     mc.className = 'main-content has-bottom-nav';
@@ -1081,6 +1081,7 @@ function showAdminPage(id) {
   if (id==='adashboard') renderAdminDash();
   if (id==='aschedule')  renderAdminSchedule();
   if (id==='apayroll')   renderPayroll();
+  if (id==='aentries')   { renderDashEntries(); document.getElementById('dash-entries-emp')?.addEventListener('change',renderDashEntries); document.getElementById('dash-entries-date')?.addEventListener('change',renderDashEntries); }
   if (id==='atimeoff')   renderAdminTimeOff();
   if (id==='aincidents') renderAdminIncidents();
   if (id==='apanel')     renderAdminPanel();
@@ -1568,8 +1569,6 @@ function renderAdminDash() {
 
   // Render editable time entries table
   renderDashEntries();
-  document.getElementById('dash-entries-emp')?.addEventListener('change', renderDashEntries);
-  document.getElementById('dash-entries-date')?.addEventListener('change', renderDashEntries);
 }
 
 // ══════════════════════════════════════
@@ -2253,6 +2252,16 @@ wire('delete-edit-shift',  'click', deleteEditShift);
 wire('close-edit-entry',   'click', ()=>closeModal('modal-edit-entry'));
 wire('cancel-edit-entry',  'click', ()=>closeModal('modal-edit-entry'));
 wire('confirm-edit-entry', 'click', saveEditEntry);
+wire('delete-edit-entry',  'click', async()=>{
+  if (!editingEntryId) return;
+  try {
+    await sb('time_entries','DELETE',null,`?id=eq.${editingEntryId}`);
+    store.timeEntries = store.timeEntries.filter(e=>e.id!==editingEntryId);
+    closeModal('modal-edit-entry');
+    renderDashEntries();
+    showToast('Entry deleted','success');
+  } catch(e) { showToast('Error: '+e.message,'error'); }
+});
 
 wire('atab-employees',   'click', ()=>switchAdminTab('employees'));
 wire('atab-locations',   'click', ()=>switchAdminTab('locations'));
