@@ -1494,20 +1494,58 @@ function incHtml(i, showUser) {
   const dt  = new Date(i.datetime);
   const dtEnd = i.datetimeEnd ? new Date(i.datetimeEnd) : null;
   const u   = store.users.find(u=>u.id===i.userId);
-  const timeRange = dtEnd
-    ? `${dt.toLocaleDateString('en-US',{month:'short',day:'numeric'})} ${dt.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})} – ${dtEnd.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}`
-    : `${dt.toLocaleDateString('en-US',{month:'short',day:'numeric'})} ${dt.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}`;
-  return `<div class="inc-item inc-${sc}">
-    <div class="inc-hdr">
-      <div><div class="inc-ttl">${i.title}</div><div class="inc-meta">${i.location} · ${timeRange}${showUser&&u?` · ${u.name}`:''}</div></div>
-      <div style="display:flex;align-items:center;gap:8px;">
-        <span class="sev-badge sb-${sc}">${i.severity}</span>
-        ${showUser?`<button type="button" class="btn btn-danger btn-xs" onclick="deleteIncident(${i.id})">DEL</button>`:''}
+  const dateStr = dt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
+  const timeStart = dt.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+  const timeEnd   = dtEnd ? dtEnd.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}) : null;
+
+  if (showUser) {
+    // Full admin view
+    return `<div class="inc-item inc-${sc}" style="margin-bottom:14px;">
+      <div class="inc-hdr" style="margin-bottom:10px;">
+        <div style="flex:1;">
+          <div class="inc-ttl" style="font-size:16px;margin-bottom:4px;">${i.title}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+            <span class="sev-badge sb-${sc}">${i.severity}</span>
+            ${u?`<span style="font-family:'Barlow Condensed',sans-serif;font-size:11px;color:var(--silver-light);letter-spacing:1px;">👤 ${u.name}</span>`:''}
+          </div>
+        </div>
+        <button type="button" class="btn btn-danger btn-xs" onclick="deleteIncident(${i.id})">DEL</button>
       </div>
-    </div>
-    <div class="inc-body">${i.desc}</div>
-    ${i.actions?`<div class="inc-body" style="margin-top:6px;border-top:1px solid var(--border);padding-top:6px;font-size:11px;color:var(--silver);">ACTIONS: ${i.actions}</div>`:''}
-  </div>`;
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+        <div style="background:rgba(0,0,0,0.2);border-radius:6px;padding:10px;">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:9px;letter-spacing:2px;color:var(--silver);margin-bottom:4px;">DATE</div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:13px;color:var(--chrome);">${dateStr}</div>
+        </div>
+        <div style="background:rgba(0,0,0,0.2);border-radius:6px;padding:10px;">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:9px;letter-spacing:2px;color:var(--silver);margin-bottom:4px;">TIME</div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:13px;color:var(--chrome);">${timeStart}${timeEnd?' – '+timeEnd:''}</div>
+        </div>
+        <div style="background:rgba(0,0,0,0.2);border-radius:6px;padding:10px;">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:9px;letter-spacing:2px;color:var(--silver);margin-bottom:4px;">LOCATION</div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:13px;color:var(--chrome);">📍 ${i.location}</div>
+        </div>
+      </div>
+      <div style="margin-bottom:8px;">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:9px;letter-spacing:2px;color:var(--silver);margin-bottom:6px;">DESCRIPTION</div>
+        <div class="inc-body" style="font-size:14px;line-height:1.7;">${i.desc}</div>
+      </div>
+      ${i.actions?`<div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:9px;letter-spacing:2px;color:var(--silver);margin-bottom:6px;">ACTIONS TAKEN</div>
+        <div class="inc-body" style="font-size:13px;line-height:1.6;color:var(--silver-light);">${i.actions}</div>
+      </div>`:''}
+    </div>`;
+  } else {
+    // Employee compact view
+    const timeRange = dtEnd ? `${dateStr} ${timeStart} – ${timeEnd}` : `${dateStr} ${timeStart}`;
+    return `<div class="inc-item inc-${sc}">
+      <div class="inc-hdr">
+        <div><div class="inc-ttl">${i.title}</div><div class="inc-meta">${i.location} · ${timeRange}</div></div>
+        <span class="sev-badge sb-${sc}">${i.severity}</span>
+      </div>
+      <div class="inc-body">${i.desc}</div>
+      ${i.actions?`<div class="inc-body" style="margin-top:6px;border-top:1px solid var(--border);padding-top:6px;font-size:11px;color:var(--silver);">ACTIONS: ${i.actions}</div>`:''}
+    </div>`;
+  }
 }
 
 // ══════════════════════════════════════
