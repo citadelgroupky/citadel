@@ -787,7 +787,7 @@ tbody td strong{color:var(--white);}
       </div>
     </div>
     <div class="field"><label>Location</label><select id="edit-shift-location" class="field select"></select></div>
-    <div class="modal-footer" style="justify-content:space-between;">
+    <div class="modal-footer" style="justify-content:space-between!important;">
       <button type="button" class="btn btn-danger btn-sm" id="delete-edit-shift">DELETE</button>
       <div style="display:flex;gap:8px;">
         <button type="button" class="btn btn-outline btn-sm" id="cancel-edit-shift">CANCEL</button>
@@ -1699,7 +1699,6 @@ async function saveEditShift() {
 
 async function deleteEditShift() {
   const id = parseInt(document.getElementById('delete-edit-shift').dataset.id);
-  if (!confirm('Delete this shift?')) return;
   try {
     await sb('shifts','DELETE',null,`?id=eq.${id}`);
     store.shifts = store.shifts.filter(s=>s.id!==id);
