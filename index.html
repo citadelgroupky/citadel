@@ -248,6 +248,7 @@ tbody td strong{color:var(--white);}
 .del-shift:hover{opacity:1;}
 .add-shift-btn{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--silver-dark);font-size:18px;opacity:0;transition:opacity 0.2s;cursor:pointer;background:none;border:none;width:100%;height:100%;z-index:1;}
 .sch-shift-cell:hover .add-shift-btn{opacity:1;}
+.shift-block{position:relative;z-index:2;}
 .modal-overlay.open{z-index:500;}
 .week-nav{display:flex;align-items:center;gap:12px;margin-bottom:14px;}
 .week-nav button{background:transparent;border:1px solid var(--border-bright);border-radius:4px;color:var(--silver-light);padding:7px 14px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:1px;transition:all 0.2s;}
@@ -1596,12 +1597,17 @@ function renderAdminSchedule() {
       const shifts=store.shifts.filter(s=>s.userId===emp.id&&s.date===date);
       html+=`<div class="sch-shift-cell">`;
       shifts.forEach(s=>{
-        html+=`<div class="shift-block" style="cursor:pointer;" data-shift-id="${s.id}">
+        html+=`<div class="shift-block" style="cursor:pointer;z-index:2;position:relative;" data-shift-id="${s.id}">
           <div class="shift-time">${fmt12(s.start)}</div>
           <div class="shift-loc">${s.location}</div>
         </div>`;
       });
-      html+=`<button type="button" class="add-shift-btn" data-uid="${emp.id}" data-date="${date}">+</button></div>`;
+      if (shifts.length === 0) {
+        html+=`<button type="button" class="add-shift-btn" data-uid="${emp.id}" data-date="${date}">+</button>`;
+      } else {
+        html+=`<button type="button" style="background:none;border:none;color:var(--silver-dark);font-size:16px;cursor:pointer;padding:2px 4px;width:100%;text-align:center;" data-uid="${emp.id}" data-date="${date}" class="add-shift-btn">+</button>`;
+      }
+      html+=`</div>`;
     });
   });
   html+=`</div></div>`;
