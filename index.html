@@ -408,9 +408,13 @@ tbody td strong{color:var(--white);}
     <div class="page" id="page-schedule">
       <div class="page-header">
         <div class="page-title">Schedule</div>
-        <div class="page-sub">Your upcoming shifts</div>
+      </div>
+      <div class="role-tabs" style="margin-bottom:16px;">
+        <button type="button" class="role-tab active" id="sched-tab-mine" onclick="switchSchedTab('mine')">MY SHIFTS</button>
+        <button type="button" class="role-tab" id="sched-tab-all" onclick="switchSchedTab('all')">FULL SCHEDULE</button>
       </div>
       <div id="my-schedule-content"></div>
+      <div id="full-schedule-content" style="display:none;"></div>
     </div>
 
     <!-- Time Off -->
@@ -1237,7 +1241,18 @@ function renderClockLog() {
 // ══════════════════════════════════════
 // MY SCHEDULE
 // ══════════════════════════════════════
+let empSchedWeekOffset = 0;
+
+function switchSchedTab(tab) {
+  document.getElementById('sched-tab-mine').classList.toggle('active', tab==='mine');
+  document.getElementById('sched-tab-all').classList.toggle('active', tab==='all');
+  document.getElementById('my-schedule-content').style.display = tab==='mine' ? 'block' : 'none';
+  document.getElementById('full-schedule-content').style.display = tab==='all' ? 'block' : 'none';
+  if (tab==='all') renderFullSchedule();
+}
+
 function renderMySchedule() {
+  empSchedWeekOffset = 0;
   const shifts = store.shifts.filter(s=>s.userId===currentUser.id&&s.date>=today()).sort((a,b)=>a.date.localeCompare(b.date));
   const cont = document.getElementById('my-schedule-content');
   if (!shifts.length) { cont.innerHTML=`<div class="empty">No upcoming shifts scheduled.</div>`; return; }
@@ -1249,6 +1264,51 @@ function renderMySchedule() {
       <div class="msc-info"><div class="msc-time">${fmt12(s.start)} – ${fmt12(s.end)}</div><div class="msc-loc">📍 ${s.location}</div></div>
     </div>`;
   }).join('');
+  // Reset full schedule tab to mine on re-render
+  document.getElementById('sched-tab-mine').classList.add('active');
+  document.getElementById('sched-tab-all').classList.remove('active');
+  document.getElementById('my-schedule-content').style.display = 'block';
+  document.getElementById('full-schedule-content').style.display = 'none';
+}
+
+function renderFullSchedule() {
+  const cont  = document.getElementById('full-schedule-content');
+  const dates = getWeekDates(empSchedWeekOffset);
+  const emps  = store.users.filter(u=>u.role==='employee');
+  const DAYS  = ['MON','TUE','WED','THU','FRI','SAT','SUN'];
+
+  let html = `<div class="week-nav">
+    <button type="button" id="emp-week-prev" onclick="empSchedWeekOffset--;renderFullSchedule();">&#8592;</button>
+    <span class="week-label">${formatDate(dates[0])} – ${formatDate(dates[6])}</span>
+    <button type="button" id="emp-week-next" onclick="empSchedWeekOffset++;renderFullSchedule();">&#8594;</button>
+  </div>
+  <div class="schedule-outer"><div class="schedule-grid">
+    <div class="sch-hdr">EMPLOYEE</div>`;
+
+  dates.forEach((d,i)=>{
+    const isT = d===today();
+    html+=`<div class="sch-hdr" style="${isT?'color:var(--chrome);background:rgba(200,200,220,0.08);':''}">${DAYS[i]}<br><span style="font-size:13px;font-weight:700;">${d.split('-')[2]}</span></div>`;
+  });
+
+  emps.forEach(emp=>{
+    const isMe = emp.id === currentUser.id;
+    html+=`<div class="sch-emp-cell" style="${isMe?'color:var(--gold-light);':''}">${emp.name.split(' ')[0]}${isMe?' ★':''}</div>`;
+    dates.forEach(date=>{
+      const shifts = store.shifts.filter(s=>s.userId===emp.id&&s.date===date);
+      html+=`<div class="sch-shift-cell" style="cursor:default;">`;
+      shifts.forEach(s=>{
+        const isMyShift = emp.id === currentUser.id;
+        html+=`<div class="shift-block" style="${isMyShift?'border-color:rgba(184,160,96,0.4);background:linear-gradient(135deg,rgba(184,160,96,0.15),rgba(184,160,96,0.05));':''}">
+          <div class="shift-time">${fmt12(s.start)}</div>
+          <div class="shift-loc">${s.location}</div>
+        </div>`;
+      });
+      html+=`</div>`;
+    });
+  });
+
+  html+=`</div></div>`;
+  cont.innerHTML = html;
 }
 
 // ══════════════════════════════════════
