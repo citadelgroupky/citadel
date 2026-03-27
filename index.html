@@ -731,6 +731,72 @@ tbody td strong{color:var(--white);}
   </div>
 </div>
 
+<div class="modal-overlay" id="modal-edit-shift">
+  <div class="modal">
+    <button type="button" class="modal-close" id="close-edit-shift">&#10005;</button>
+    <div class="modal-title">Edit Shift</div>
+    <div id="edit-shift-info" style="font-family:'Barlow Condensed',sans-serif;font-size:12px;color:var(--silver);letter-spacing:1px;margin-bottom:16px;"></div>
+    <div class="field">
+      <label>Start Time</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div class="shift-select-wrap">
+          <select id="edit-shift-start-h" class="shift-sel">
+            <option value="00">12 AM</option><option value="01">1 AM</option><option value="02">2 AM</option>
+            <option value="03">3 AM</option><option value="04">4 AM</option><option value="05">5 AM</option>
+            <option value="06">6 AM</option><option value="07">7 AM</option><option value="08">8 AM</option>
+            <option value="09">9 AM</option><option value="10">10 AM</option><option value="11">11 AM</option>
+            <option value="12">12 PM</option><option value="13">1 PM</option><option value="14">2 PM</option>
+            <option value="15">3 PM</option><option value="16">4 PM</option><option value="17">5 PM</option>
+            <option value="18">6 PM</option><option value="19">7 PM</option><option value="20">8 PM</option>
+            <option value="21">9 PM</option><option value="22">10 PM</option><option value="23">11 PM</option>
+          </select>
+          <span class="shift-sel-arrow">&#9660;</span>
+        </div>
+        <div class="shift-select-wrap">
+          <select id="edit-shift-start-m" class="shift-sel">
+            <option value="00">:00</option><option value="15">:15</option>
+            <option value="30">:30</option><option value="45">:45</option>
+          </select>
+          <span class="shift-sel-arrow">&#9660;</span>
+        </div>
+      </div>
+    </div>
+    <div class="field">
+      <label>End Time</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div class="shift-select-wrap">
+          <select id="edit-shift-end-h" class="shift-sel">
+            <option value="00">12 AM</option><option value="01">1 AM</option><option value="02">2 AM</option>
+            <option value="03">3 AM</option><option value="04">4 AM</option><option value="05">5 AM</option>
+            <option value="06">6 AM</option><option value="07">7 AM</option><option value="08">8 AM</option>
+            <option value="09">9 AM</option><option value="10">10 AM</option><option value="11">11 AM</option>
+            <option value="12">12 PM</option><option value="13">1 PM</option><option value="14">2 PM</option>
+            <option value="15">3 PM</option><option value="16">4 PM</option><option value="17">5 PM</option>
+            <option value="18">6 PM</option><option value="19">7 PM</option><option value="20">8 PM</option>
+            <option value="21">9 PM</option><option value="22">10 PM</option><option value="23">11 PM</option>
+          </select>
+          <span class="shift-sel-arrow">&#9660;</span>
+        </div>
+        <div class="shift-select-wrap">
+          <select id="edit-shift-end-m" class="shift-sel">
+            <option value="00">:00</option><option value="15">:15</option>
+            <option value="30">:30</option><option value="45">:45</option>
+          </select>
+          <span class="shift-sel-arrow">&#9660;</span>
+        </div>
+      </div>
+    </div>
+    <div class="field"><label>Location</label><select id="edit-shift-location" class="field select"></select></div>
+    <div class="modal-footer" style="justify-content:space-between;">
+      <button type="button" class="btn btn-danger btn-sm" id="delete-edit-shift">DELETE</button>
+      <div style="display:flex;gap:8px;">
+        <button type="button" class="btn btn-outline btn-sm" id="cancel-edit-shift">CANCEL</button>
+        <button type="button" class="btn btn-chrome btn-sm" id="confirm-edit-shift">SAVE</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-edit-entry">
   <div class="modal" style="max-width:380px;">
     <button type="button" class="modal-close" id="close-edit-entry">&#10005;</button>
@@ -1560,7 +1626,10 @@ function renderAdminSchedule() {
       const shifts=store.shifts.filter(s=>s.userId===emp.id&&s.date===date);
       html+=`<div class="sch-shift-cell">`;
       shifts.forEach(s=>{
-        html+=`<div class="shift-block"><button type="button" class="del-shift" data-id="${s.id}">&#10005;</button><div class="shift-time">${fmt12(s.start)}</div><div class="shift-loc">${s.location}</div></div>`;
+        html+=`<div class="shift-block" style="cursor:pointer;" data-shift-id="${s.id}">
+          <div class="shift-time">${fmt12(s.start)}</div>
+          <div class="shift-loc">${s.location}</div>
+        </div>`;
       });
       html+=`<button type="button" class="add-shift-btn" data-uid="${emp.id}" data-date="${date}">+</button></div>`;
     });
@@ -1570,16 +1639,10 @@ function renderAdminSchedule() {
 
   document.getElementById('week-prev').addEventListener('click',()=>{weekOffset--;renderAdminSchedule();});
   document.getElementById('week-next').addEventListener('click',()=>{weekOffset++;renderAdminSchedule();});
-  cont.querySelectorAll('.del-shift').forEach(btn=>{
-    btn.addEventListener('click',async e=>{
+  cont.querySelectorAll('.shift-block').forEach(block=>{
+    block.addEventListener('click', e=>{
       e.stopPropagation();
-      const id=parseInt(btn.dataset.id);
-      try {
-        await sb('shifts','DELETE',null,`?id=eq.${id}`);
-        store.shifts=store.shifts.filter(s=>s.id!==id);
-        renderAdminSchedule();
-        showToast('Shift removed','success');
-      } catch(err) { showToast('Error: '+err.message,'error'); }
+      openEditShift(parseInt(block.dataset.shiftId));
     });
   });
   cont.querySelectorAll('.add-shift-btn').forEach(btn=>{
@@ -1593,6 +1656,57 @@ function openAddShift(userId, date) {
   document.getElementById('modal-shift-info').textContent=`${u?.name} — ${formatDate(date)}`;
   document.getElementById('shift-location').innerHTML=store.locations.map(l=>`<option>${l.name}</option>`).join('');
   openModal('modal-add-shift');
+}
+
+function openEditShift(id) {
+  const s = store.shifts.find(s=>s.id===id);
+  if (!s) return;
+  const u = store.users.find(u=>u.id===s.userId);
+  document.getElementById('edit-shift-info').textContent = `${u?.name||'?'} — ${formatDate(s.date)}`;
+  // Populate time selects
+  const [startH, startM] = (s.start||'00:00').split(':');
+  const [endH,   endM  ] = (s.end  ||'00:00').split(':');
+  document.getElementById('edit-shift-start-h').value = startH;
+  document.getElementById('edit-shift-start-m').value = startM;
+  document.getElementById('edit-shift-end-h').value   = endH;
+  document.getElementById('edit-shift-end-m').value   = endM;
+  // Populate location
+  const locSel = document.getElementById('edit-shift-location');
+  locSel.innerHTML = store.locations.map(l=>`<option${l.name===s.location?' selected':''}>${l.name}</option>`).join('');
+  document.getElementById('confirm-edit-shift').dataset.id  = id;
+  document.getElementById('delete-edit-shift').dataset.id   = id;
+  openModal('modal-edit-shift');
+}
+
+async function saveEditShift() {
+  const id = parseInt(document.getElementById('confirm-edit-shift').dataset.id);
+  const startH = document.getElementById('edit-shift-start-h').value;
+  const startM = document.getElementById('edit-shift-start-m').value;
+  const endH   = document.getElementById('edit-shift-end-h').value;
+  const endM   = document.getElementById('edit-shift-end-m').value;
+  const loc    = document.getElementById('edit-shift-location').value;
+  const start  = startH+':'+startM;
+  const end    = endH+':'+endM;
+  try {
+    await sb('shifts','PATCH',{start_time:start, end_time:end, location:loc},`?id=eq.${id}`);
+    const s = store.shifts.find(s=>s.id===id);
+    if (s) { s.start=start; s.end=end; s.location=loc; }
+    closeModal('modal-edit-shift');
+    renderAdminSchedule();
+    showToast('Shift updated','success');
+  } catch(e) { showToast('Error: '+e.message,'error'); }
+}
+
+async function deleteEditShift() {
+  const id = parseInt(document.getElementById('delete-edit-shift').dataset.id);
+  if (!confirm('Delete this shift?')) return;
+  try {
+    await sb('shifts','DELETE',null,`?id=eq.${id}`);
+    store.shifts = store.shifts.filter(s=>s.id!==id);
+    closeModal('modal-edit-shift');
+    renderAdminSchedule();
+    showToast('Shift deleted','success');
+  } catch(e) { showToast('Error: '+e.message,'error'); }
 }
 
 async function saveShift() {
@@ -2148,6 +2262,11 @@ wire('sev-High',   'click', ()=>setSeverity('High'));
 wire('inc-submit', 'click', submitIncident);
 
 wire('payroll-emp-filter', 'change', renderPayroll);
+
+wire('close-edit-shift',   'click', ()=>closeModal('modal-edit-shift'));
+wire('cancel-edit-shift',  'click', ()=>closeModal('modal-edit-shift'));
+wire('confirm-edit-shift', 'click', saveEditShift);
+wire('delete-edit-shift',  'click', deleteEditShift);
 
 wire('close-edit-entry',   'click', ()=>closeModal('modal-edit-entry'));
 wire('cancel-edit-entry',  'click', ()=>closeModal('modal-edit-entry'));
