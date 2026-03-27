@@ -1450,26 +1450,34 @@ async function submitIncident() {
   const datetimeEnd = document.getElementById('inc-datetime-end').value;
   const desc        = document.getElementById('inc-desc').value.trim();
   const actions     = document.getElementById('inc-actions').value.trim();
-  if (!title||!location||!datetime||!desc||!selectedSev) { showToast('Fill in all fields + severity','error'); return; }
+  if (!title||!location||!datetime||!desc||!selectedSev) { showToast('Fill in all required fields + severity','error'); return; }
+
+  const payload = {
+    user_id: currentUser.id,
+    title,
+    location,
+    incident_datetime: datetime,
+    severity: selectedSev,
+    description: desc,
+    actions_taken: actions
+  };
+
   try {
-    const saved = await sb('incidents','POST',{
-      user_id: currentUser.id,
-      title,
-      location,
-      incident_datetime: datetime,
-      incident_datetime_end: datetimeEnd || null,
-      severity: selectedSev,
-      description: desc,
-      actions_taken: actions
-    });
-    const mapped = {...saved[0], userId:saved[0].user_id, datetime:saved[0].incident_datetime, datetimeEnd:saved[0].incident_datetime_end, desc:saved[0].description, actions:saved[0].actions_taken};
+    const saved = await sb('incidents','POST', payload);
+    if (!saved || !saved[0]) throw new Error('No data returned from server');
+    const mapped = {...saved[0], userId:saved[0].user_id, datetime:saved[0].incident_datetime, datetimeEnd:saved[0].incident_datetime_end||null, desc:saved[0].description, actions:saved[0].actions_taken};
     store.incidents.unshift(mapped);
     showToast('Report submitted','success');
-    ['inc-title','inc-location','inc-datetime','inc-datetime-end','inc-desc','inc-actions'].forEach(id=>document.getElementById(id).value='');
+    ['inc-title','inc-location','inc-datetime','inc-datetime-end','inc-desc','inc-actions'].forEach(id=>{
+      const el = document.getElementById(id); if(el) el.value='';
+    });
     selectedSev=null;
     ['Low','Medium','High'].forEach(s=>{const b=document.getElementById('sev-'+s);if(b)b.className='sev-btn';});
     renderEmpIncidents();
-  } catch(e) { showToast('Error: '+e.message,'error'); }
+  } catch(e) {
+    console.error('Incident submit error:', e);
+    showToast('Error: '+e.message,'error');
+  }
 }
 
 function renderEmpIncidents() {
