@@ -732,15 +732,15 @@ tbody td strong{color:var(--white);}
 </div>
 
 <div class="modal-overlay" id="modal-edit-shift">
-  <div class="modal">
+  <div class="modal" style="padding:20px;">
     <button type="button" class="modal-close" id="close-edit-shift">&#10005;</button>
-    <div class="modal-title">Edit Shift</div>
-    <div id="edit-shift-info" style="font-family:'Barlow Condensed',sans-serif;font-size:12px;color:var(--silver);letter-spacing:1px;margin-bottom:16px;"></div>
-    <div class="field">
+    <div class="modal-title" style="margin-bottom:12px;padding-bottom:10px;">Edit Shift</div>
+    <div id="edit-shift-info" style="font-family:'Barlow Condensed',sans-serif;font-size:12px;color:var(--silver);letter-spacing:1px;margin-bottom:12px;"></div>
+    <div class="field" style="margin-bottom:10px;">
       <label>Start Time</label>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
         <div class="shift-select-wrap">
-          <select id="edit-shift-start-h" class="shift-sel">
+          <select id="edit-shift-start-h" class="shift-sel" style="padding:10px 36px 10px 12px;">
             <option value="00">12 AM</option><option value="01">1 AM</option><option value="02">2 AM</option>
             <option value="03">3 AM</option><option value="04">4 AM</option><option value="05">5 AM</option>
             <option value="06">6 AM</option><option value="07">7 AM</option><option value="08">8 AM</option>
@@ -753,7 +753,7 @@ tbody td strong{color:var(--white);}
           <span class="shift-sel-arrow">&#9660;</span>
         </div>
         <div class="shift-select-wrap">
-          <select id="edit-shift-start-m" class="shift-sel">
+          <select id="edit-shift-start-m" class="shift-sel" style="padding:10px 36px 10px 12px;">
             <option value="00">:00</option><option value="15">:15</option>
             <option value="30">:30</option><option value="45">:45</option>
           </select>
@@ -761,11 +761,11 @@ tbody td strong{color:var(--white);}
         </div>
       </div>
     </div>
-    <div class="field">
+    <div class="field" style="margin-bottom:10px;">
       <label>End Time</label>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
         <div class="shift-select-wrap">
-          <select id="edit-shift-end-h" class="shift-sel">
+          <select id="edit-shift-end-h" class="shift-sel" style="padding:10px 36px 10px 12px;">
             <option value="00">12 AM</option><option value="01">1 AM</option><option value="02">2 AM</option>
             <option value="03">3 AM</option><option value="04">4 AM</option><option value="05">5 AM</option>
             <option value="06">6 AM</option><option value="07">7 AM</option><option value="08">8 AM</option>
@@ -778,7 +778,7 @@ tbody td strong{color:var(--white);}
           <span class="shift-sel-arrow">&#9660;</span>
         </div>
         <div class="shift-select-wrap">
-          <select id="edit-shift-end-m" class="shift-sel">
+          <select id="edit-shift-end-m" class="shift-sel" style="padding:10px 36px 10px 12px;">
             <option value="00">:00</option><option value="15">:15</option>
             <option value="30">:30</option><option value="45">:45</option>
           </select>
@@ -786,14 +786,12 @@ tbody td strong{color:var(--white);}
         </div>
       </div>
     </div>
-    <div class="field"><label>Location</label><select id="edit-shift-location" class="field select"></select></div>
-    <div class="modal-footer" style="justify-content:space-between!important;">
-      <button type="button" class="btn btn-danger btn-sm" id="delete-edit-shift">DELETE</button>
-      <div style="display:flex;gap:8px;">
-        <button type="button" class="btn btn-outline btn-sm" id="cancel-edit-shift">CANCEL</button>
-        <button type="button" class="btn btn-chrome btn-sm" id="confirm-edit-shift">SAVE</button>
-      </div>
+    <div class="field" style="margin-bottom:16px;"><label>Location</label><select id="edit-shift-location"></select></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:8px;">
+      <button type="button" class="btn btn-outline btn-sm" id="cancel-edit-shift">CANCEL</button>
+      <button type="button" class="btn btn-chrome btn-sm" id="confirm-edit-shift">SAVE</button>
     </div>
+    <button type="button" class="btn btn-danger" style="width:100%;" id="delete-edit-shift">DELETE SHIFT</button>
   </div>
 </div>
 
