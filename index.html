@@ -485,6 +485,20 @@ tbody td strong{color:var(--white);}
           </div>
           <div class="field"><label>Description</label><textarea id="inc-desc" placeholder="What happened..."></textarea></div>
           <div class="field"><label>Actions Taken</label><textarea id="inc-actions" placeholder="Steps taken..." style="min-height:70px;"></textarea></div>
+          <div class="field">
+            <label>Photos / Videos</label>
+            <div id="inc-media-preview" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;"></div>
+            <div style="display:flex;gap:8px;">
+              <label style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;background:rgba(255,255,255,0.05);border:1px dashed var(--border-bright);border-radius:6px;padding:12px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:2px;color:var(--silver);">
+                📁 UPLOAD
+                <input type="file" id="inc-media-upload" accept="image/*,video/*" multiple style="display:none;" onchange="handleMediaSelect(this)"/>
+              </label>
+              <label style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;background:rgba(255,255,255,0.05);border:1px dashed var(--border-bright);border-radius:6px;padding:12px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:2px;color:var(--silver);">
+                📷 CAMERA
+                <input type="file" id="inc-media-camera" accept="image/*,video/*" capture="environment" style="display:none;" onchange="handleMediaSelect(this)"/>
+              </label>
+            </div>
+          </div>
           <button type="button" class="btn btn-chrome" id="inc-submit" style="max-width:200px;">SUBMIT</button>
         </div>
         <div style="margin-top:20px;" id="incident-log-wrap">
@@ -877,7 +891,7 @@ async function loadAllData() {
     });
     store.shifts        = shifts.map(s=>({...s, userId:s.user_id, start:s.start_time, end:s.end_time}));
     store.timeEntries   = entries.map(e=>({...e, userId:e.user_id, clockIn:e.clock_in, clockOut:e.clock_out, location:e.site}));
-    store.incidents     = incidents.map(i=>({...i, userId:i.user_id, datetime:i.incident_datetime, datetimeEnd:i.incident_datetime_end, desc:i.description, actions:i.actions_taken}));
+    store.incidents     = incidents.map(i=>({...i, userId:i.user_id, datetime:i.incident_datetime, datetimeEnd:i.incident_datetime_end, desc:i.description, actions:i.actions_taken, mediaUrls: i.media_urls ? JSON.parse(i.media_urls) : []}));
     store.timeOffRequests = timeoff.map(r=>({...r, userId:r.user_id, from:r.from_date, to:r.to_date}));
     // Auto-remove approved requests whose end date has passed
     const expiredApproved = store.timeOffRequests.filter(r=>r.status==='Approved' && r.to < today());
@@ -1453,6 +1467,61 @@ async function renderClockedIn() {
 }
 
 // ══════════════════════════════════════
+// INCIDENT MEDIA
+// ══════════════════════════════════════
+let incMediaFiles = [];
+
+function handleMediaSelect(input) {
+  const files = Array.from(input.files);
+  incMediaFiles = [...incMediaFiles, ...files];
+  renderMediaPreview();
+  input.value = ''; // reset so same file can be added again
+}
+
+function renderMediaPreview() {
+  const preview = document.getElementById('inc-media-preview');
+  if (!preview) return;
+  if (!incMediaFiles.length) { preview.innerHTML = ''; return; }
+  preview.innerHTML = incMediaFiles.map((f, i) => {
+    const isVideo = f.type.startsWith('video/');
+    const url = URL.createObjectURL(f);
+    return `<div style="position:relative;width:72px;height:72px;border-radius:6px;overflow:hidden;border:1px solid var(--border-bright);">
+      ${isVideo
+        ? `<video src="${url}" style="width:100%;height:100%;object-fit:cover;"></video><div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:20px;">▶</div>`
+        : `<img src="${url}" style="width:100%;height:100%;object-fit:cover;"/>`}
+      <button type="button" onclick="removeMedia(${i})" style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,0.7);border:none;border-radius:50%;width:18px;height:18px;color:white;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function removeMedia(index) {
+  incMediaFiles.splice(index, 1);
+  renderMediaPreview();
+}
+
+async function uploadIncidentMedia(incidentId) {
+  if (!incMediaFiles.length) return [];
+  const urls = [];
+  for (const file of incMediaFiles) {
+    const ext = file.name.split('.').pop();
+    const path = `${incidentId}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/incident-media/${path}`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': file.type,
+        'x-upsert': 'true'
+      },
+      body: file
+    });
+    if (res.ok) {
+      urls.push(`${SUPABASE_URL}/storage/v1/object/public/incident-media/${path}`);
+    }
+  }
+  return urls;
+}
+// ══════════════════════════════════════
 // INCIDENTS
 // ══════════════════════════════════════
 function setSeverity(sev) {
@@ -1473,6 +1542,10 @@ async function submitIncident() {
   const actions     = document.getElementById('inc-actions').value.trim();
   if (!title||!location||!datetime||!desc||!selectedSev) { showToast('Fill in all required fields + severity','error'); return; }
 
+  const submitBtn = document.getElementById('inc-submit');
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'SUBMITTING...';
+
   const payload = {
     user_id: currentUser.id,
     title,
@@ -1487,18 +1560,44 @@ async function submitIncident() {
   try {
     const saved = await sb('incidents','POST', payload);
     if (!saved || !saved[0]) throw new Error('No data returned from server');
-    const mapped = {...saved[0], userId:saved[0].user_id, datetime:saved[0].incident_datetime, datetimeEnd:saved[0].incident_datetime_end||null, desc:saved[0].description, actions:saved[0].actions_taken};
+    const incidentId = saved[0].id;
+
+    // Upload media files if any
+    let mediaUrls = [];
+    if (incMediaFiles.length) {
+      showToast('Uploading media...', 'success');
+      mediaUrls = await uploadIncidentMedia(incidentId);
+      // Save URLs back to the incident record
+      if (mediaUrls.length) {
+        await sb('incidents','PATCH',{media_urls: JSON.stringify(mediaUrls)},`?id=eq.${incidentId}`);
+      }
+    }
+
+    const mapped = {
+      ...saved[0],
+      userId: saved[0].user_id,
+      datetime: saved[0].incident_datetime,
+      datetimeEnd: saved[0].incident_datetime_end||null,
+      desc: saved[0].description,
+      actions: saved[0].actions_taken,
+      mediaUrls
+    };
     store.incidents.unshift(mapped);
     showToast('Report submitted','success');
     ['inc-title','inc-location','inc-datetime','inc-datetime-end','inc-desc','inc-actions'].forEach(id=>{
       const el = document.getElementById(id); if(el) el.value='';
     });
+    incMediaFiles = [];
+    renderMediaPreview();
     selectedSev=null;
     ['Low','Medium','High'].forEach(s=>{const b=document.getElementById('sev-'+s);if(b)b.className='sev-btn';});
     renderEmpIncidents();
   } catch(e) {
     console.error('Incident submit error:', e);
     showToast('Error: '+e.message,'error');
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'SUBMIT';
   }
 }
 
@@ -1552,6 +1651,17 @@ function incHtml(i, showUser) {
       ${i.actions?`<div>
         <div style="font-family:'Barlow Condensed',sans-serif;font-size:9px;letter-spacing:2px;color:var(--silver);margin-bottom:6px;">ACTIONS TAKEN</div>
         <div class="inc-body" style="font-size:13px;line-height:1.6;color:var(--silver-light);">${i.actions}</div>
+      </div>`:''}
+      ${i.mediaUrls&&i.mediaUrls.length?`<div style="margin-top:10px;">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:9px;letter-spacing:2px;color:var(--silver);margin-bottom:8px;">MEDIA (${i.mediaUrls.length})</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;">
+          ${i.mediaUrls.map(url=>{
+            const isVideo = url.match(/\.(mp4|mov|avi|webm|mkv)/i);
+            return isVideo
+              ? `<video src="${url}" controls style="width:120px;height:90px;object-fit:cover;border-radius:6px;border:1px solid var(--border-bright);"></video>`
+              : `<a href="${url}" target="_blank"><img src="${url}" style="width:90px;height:90px;object-fit:cover;border-radius:6px;border:1px solid var(--border-bright);"/></a>`;
+          }).join('')}
+        </div>
       </div>`:''}
     </div>`;
   } else {
