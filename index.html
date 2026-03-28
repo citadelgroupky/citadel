@@ -1513,6 +1513,8 @@ async function uploadIncidentMedia(incidentId) {
     const ext = file.name.split('.').pop().toLowerCase();
     const path = `${incidentId}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
     try {
+      console.log('Uploading to:', `${SUPABASE_URL}/storage/v1/object/incident-media/${path}`);
+      console.log('File:', file.name, file.type, file.size);
       const res = await fetch(`${SUPABASE_URL}/storage/v1/object/incident-media/${path}`, {
         method: 'POST',
         headers: {
@@ -1524,15 +1526,18 @@ async function uploadIncidentMedia(incidentId) {
         },
         body: file
       });
+      const responseText = await res.text();
+      console.log('Upload response:', res.status, responseText);
       if (res.ok) {
-        urls.push(`${SUPABASE_URL}/storage/v1/object/public/incident-media/${path}`);
+        const url = `${SUPABASE_URL}/storage/v1/object/public/incident-media/${path}`;
+        urls.push(url);
+        console.log('Upload success:', url);
       } else {
-        const err = await res.text();
-        console.error('Upload failed:', err);
-        showToast('Media upload failed: ' + res.status, 'error');
+        showToast('Upload failed: ' + res.status + ' ' + responseText, 'error');
       }
     } catch(e) {
-      console.error('Upload error:', e);
+      console.error('Upload exception:', e);
+      showToast('Upload error: ' + e.message, 'error');
     }
   }
   return urls;
