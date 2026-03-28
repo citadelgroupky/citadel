@@ -1584,7 +1584,11 @@ async function submitIncident() {
   const datetimeEnd = document.getElementById('inc-datetime-end').value;
   const desc        = document.getElementById('inc-desc').value.trim();
   const actions     = document.getElementById('inc-actions').value.trim();
-  if (!title||!location||!datetime||!desc||!selectedSev) { showToast('Fill in all required fields + severity','error'); return; }
+  if (!title||!location||!datetime||!desc||!selectedSev) { 
+    if (!datetime) showToast('Please set the Time of Incident','error');
+    else showToast('Fill in all required fields + severity','error'); 
+    return; 
+  }
 
   // Format end time into description so no extra column needed
   const endTimeLabel = datetimeEnd ? `\n[End of Incident: ${new Date(datetimeEnd).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}]` : '';
@@ -1598,7 +1602,7 @@ async function submitIncident() {
     user_id: currentUser.id,
     title,
     location,
-    incident_datetime: datetime,
+    incident_datetime: datetime || new Date().toISOString().slice(0,16),
     severity: selectedSev,
     description: fullDesc,
     actions_taken: actions
