@@ -1539,33 +1539,38 @@ async function uploadIncidentMedia(incidentId) {
 }
 async function loadIncidentMedia(incidentId) {
   try {
-    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/list/incident-media`, {
-      method: 'POST',
+    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/list/incident-media?prefix=${incidentId}/&limit=20`, {
+      method: 'GET',
       headers: {
         'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ prefix: `${incidentId}/`, limit: 20 })
+        'Authorization': `Bearer ${SUPABASE_KEY}`
+      }
     });
     if (!res.ok) return [];
     const files = await res.json();
-    return files.map(f => `${SUPABASE_URL}/storage/v1/object/public/incident-media/${incidentId}/${f.name}`);
-  } catch(e) { return []; }
+    if (!Array.isArray(files)) return [];
+    return files
+      .filter(f => f.name && !f.name.endsWith('/'))
+      .map(f => `${SUPABASE_URL}/storage/v1/object/public/incident-media/${incidentId}/${f.name}`);
+  } catch(e) { 
+    console.error('loadIncidentMedia error:', e);
+    return []; 
+  }
 }
 
 async function renderIncidentMedia(incidentId, containerId) {
   const el = document.getElementById(containerId);
   if (!el) return;
-  el.innerHTML = '<span style="font-size:11px;color:var(--silver);">Loading media...</span>';
   const urls = await loadIncidentMedia(incidentId);
-  if (!urls.length) { el.innerHTML = ''; return; }
-  el.innerHTML = urls.map(url => {
-    const isVideo = url.match(/\.(mp4|mov|avi|webm|mkv)/i);
-    return isVideo
-      ? `<video src="${url}" controls style="width:120px;height:90px;object-fit:cover;border-radius:6px;border:1px solid var(--border-bright);"></video>`
-      : `<a href="${url}" target="_blank"><img src="${url}" style="width:90px;height:90px;object-fit:cover;border-radius:6px;border:1px solid var(--border-bright);"/></a>`;
-  }).join('');
+  if (!urls.length) { el.style.display='none'; return; }
+  el.style.display = 'flex';
+  el.innerHTML = `<div style="width:100%;font-family:'Barlow Condensed',sans-serif;font-size:9px;letter-spacing:2px;color:var(--silver);margin-bottom:6px;">MEDIA (${urls.length})</div>` +
+    urls.map(url => {
+      const isVideo = url.match(/\.(mp4|mov|avi|webm|mkv)/i);
+      return isVideo
+        ? `<video src="${url}" controls style="width:120px;height:90px;object-fit:cover;border-radius:6px;border:1px solid var(--border-bright);"></video>`
+        : `<a href="${url}" target="_blank"><img src="${url}" style="width:90px;height:90px;object-fit:cover;border-radius:6px;border:1px solid var(--border-bright);"/></a>`;
+    }).join('');
 }
 
 function setSeverity(sev) {
@@ -1699,10 +1704,7 @@ function incHtml(i, showUser) {
         <div style="font-family:'Barlow Condensed',sans-serif;font-size:9px;letter-spacing:2px;color:var(--silver);margin-bottom:6px;">ACTIONS TAKEN</div>
         <div class="inc-body" style="font-size:13px;line-height:1.6;color:var(--silver-light);">${i.actions}</div>
       </div>`:''}
-      <div style="margin-top:10px;">
-        <div style="font-family:'Barlow Condensed',sans-serif;font-size:9px;letter-spacing:2px;color:var(--silver);margin-bottom:8px;">MEDIA</div>
-        <div id="inc-media-${i.id}" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
-      </div>
+      <div id="inc-media-${i.id}" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;"></div>
     </div>`;
   } else {
     // Employee compact view
