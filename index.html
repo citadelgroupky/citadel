@@ -871,7 +871,10 @@ async function loadAllData() {
       sb('settings', 'GET', null, '?select=*&limit=1'),
     ]);
     store.users         = users.map(u=>({...u, id:u.id}));
-    store.locations     = locations;
+    store.locations     = locations.map(l=>{
+      const colors = JSON.parse(localStorage.getItem('citadel_loc_colors')||'{}');
+      return {...l, color: l.color || colors[l.id] || '#6b6b7a'};
+    });
     store.shifts        = shifts.map(s=>({...s, userId:s.user_id, start:s.start_time, end:s.end_time}));
     store.timeEntries   = entries.map(e=>({...e, userId:e.user_id, clockIn:e.clock_in, clockOut:e.clock_out, location:e.site}));
     store.incidents     = incidents.map(i=>({...i, userId:i.user_id, datetime:i.incident_datetime, datetimeEnd:i.incident_datetime_end, desc:i.description, actions:i.actions_taken}));
@@ -2390,16 +2393,25 @@ document.getElementById('confirm-add-loc').addEventListener('click',async()=>{
 
   try {
     if (editingLocId) {
-      await sb('locations','PATCH',{name,address:addr,color},`?id=eq.${editingLocId}`);
+      await sb('locations','PATCH',{name,address:addr},`?id=eq.${editingLocId}`);
       const l = store.locations.find(l=>l.id===editingLocId);
       if (l) { l.name=name; l.address=addr; l.color=color; }
+      // Store color locally since schema cache is unreliable
+      const colors = JSON.parse(localStorage.getItem('citadel_loc_colors')||'{}');
+      colors[editingLocId] = color;
+      localStorage.setItem('citadel_loc_colors', JSON.stringify(colors));
       closeModal('modal-add-location');
       resetModal();
       renderLocationList();
       showToast('Location updated','success');
     } else {
-      const saved=await sb('locations','POST',{name,address:addr,color});
-      store.locations.push(saved[0]);
+      const saved=await sb('locations','POST',{name,address:addr});
+      const newLoc = {...saved[0], color};
+      store.locations.push(newLoc);
+      // Store color locally
+      const colors = JSON.parse(localStorage.getItem('citadel_loc_colors')||'{}');
+      colors[saved[0].id] = color;
+      localStorage.setItem('citadel_loc_colors', JSON.stringify(colors));
       closeModal('modal-add-location');
       resetModal();
       renderLocationList();
