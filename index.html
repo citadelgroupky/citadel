@@ -660,6 +660,20 @@ tbody td strong{color:var(--white);}
     <div class="modal-title">Add Location</div>
     <div class="field"><label>Location Name</label><input type="text" id="new-loc-name" placeholder="Downtown Office"/></div>
     <div class="field"><label>Address</label><input type="text" id="new-loc-addr" placeholder="123 Main St"/></div>
+    <div class="field">
+      <label>Color</label>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px;" id="loc-color-picker">
+        <div data-color="#4a9eff" onclick="selectLocColor(this)" style="width:28px;height:28px;border-radius:50%;background:#4a9eff;cursor:pointer;border:2px solid transparent;"></div>
+        <div data-color="#50c070" onclick="selectLocColor(this)" style="width:28px;height:28px;border-radius:50%;background:#50c070;cursor:pointer;border:2px solid transparent;"></div>
+        <div data-color="#e05050" onclick="selectLocColor(this)" style="width:28px;height:28px;border-radius:50%;background:#e05050;cursor:pointer;border:2px solid transparent;"></div>
+        <div data-color="#d4b878" onclick="selectLocColor(this)" style="width:28px;height:28px;border-radius:50%;background:#d4b878;cursor:pointer;border:2px solid transparent;"></div>
+        <div data-color="#b07aff" onclick="selectLocColor(this)" style="width:28px;height:28px;border-radius:50%;background:#b07aff;cursor:pointer;border:2px solid transparent;"></div>
+        <div data-color="#ff9f50" onclick="selectLocColor(this)" style="width:28px;height:28px;border-radius:50%;background:#ff9f50;cursor:pointer;border:2px solid transparent;"></div>
+        <div data-color="#50d4d4" onclick="selectLocColor(this)" style="width:28px;height:28px;border-radius:50%;background:#50d4d4;cursor:pointer;border:2px solid transparent;"></div>
+        <div data-color="#ff70a0" onclick="selectLocColor(this)" style="width:28px;height:28px;border-radius:50%;background:#ff70a0;cursor:pointer;border:2px solid transparent;"></div>
+      </div>
+      <input type="hidden" id="new-loc-color" value="#4a9eff"/>
+    </div>
     <div class="modal-footer">
       <button type="button" class="btn btn-outline btn-sm" id="cancel-add-loc">CANCEL</button>
       <button type="button" class="btn btn-chrome btn-sm" id="confirm-add-loc">ADD</button>
@@ -1335,9 +1349,11 @@ function renderFullSchedule() {
       html+=`<div class="sch-shift-cell" style="cursor:default;">`;
       shifts.forEach(s=>{
         const isMyShift = emp.id === currentUser.id;
-        html+=`<div class="shift-block" style="${isMyShift?'border-color:rgba(184,160,96,0.4);background:linear-gradient(135deg,rgba(184,160,96,0.15),rgba(184,160,96,0.05));':''}">
-          <div class="shift-time">${fmt12(s.start)}</div>
-          <div class="shift-loc">${s.location}</div>
+        const loc = store.locations.find(l=>l.name===s.location);
+        const color = loc?.color || '#6b6b7a';
+        html+=`<div class="shift-block" style="border-left:3px solid ${color};${isMyShift?'background:linear-gradient(135deg,rgba(184,160,96,0.15),rgba(184,160,96,0.05));':''}">
+          <div class="shift-time">${fmt12(s.start)} – ${fmt12(s.end)}</div>
+          <div class="shift-loc" style="color:${color};">${s.location}</div>
         </div>`;
       });
       html+=`</div>`;
@@ -1642,9 +1658,11 @@ function renderAdminSchedule() {
       const shifts=store.shifts.filter(s=>s.userId===emp.id&&s.date===date);
       html+=`<div class="sch-shift-cell">`;
       shifts.forEach(s=>{
-        html+=`<div class="shift-block">
-          <div class="shift-time">${fmt12(s.start)}</div>
-          <div class="shift-loc">${s.location}</div>
+        const loc = store.locations.find(l=>l.name===s.location);
+        const color = loc?.color || '#6b6b7a';
+        html+=`<div class="shift-block" style="border-left:3px solid ${color};">
+          <div class="shift-time">${fmt12(s.start)} – ${fmt12(s.end)}</div>
+          <div class="shift-loc" style="color:${color};">${s.location}</div>
           <button type="button" class="shift-edit-btn" data-shift-id="${s.id}">EDIT</button>
         </div>`;
       });
@@ -2070,7 +2088,7 @@ function renderLocationList() {
   if (!store.locations.length){list.innerHTML=`<div class="empty">No locations added yet.</div>`;return;}
   list.innerHTML=store.locations.map(l=>`
     <div class="emp-card">
-      <div class="emp-av" style="font-size:18px;">📍</div>
+      <div class="emp-av" style="background:${l.color||'#6b6b7a'};font-size:14px;color:white;">📍</div>
       <div class="emp-inf"><div class="emp-nm">${l.name}</div><div class="emp-dt">${l.address||''}</div></div>
       <div class="emp-act"><button type="button" class="btn btn-danger btn-xs" data-remove-loc="${l.id}">REMOVE</button></div>
     </div>`).join('');
@@ -2087,6 +2105,11 @@ function renderLocationList() {
   });
 }
 
+function selectLocColor(el) {
+  document.querySelectorAll('#loc-color-picker div').forEach(d=>d.style.border='2px solid transparent');
+  el.style.border = '2px solid white';
+  document.getElementById('new-loc-color').value = el.dataset.color;
+}
 function switchAdminTab(tab) {
   ['employees','locations','settings'].forEach(t=>{
     document.getElementById('atab-'+t).classList.toggle('active',t===tab);
@@ -2328,16 +2351,19 @@ document.getElementById('open-add-loc').addEventListener('click',   ()=>openModa
 document.getElementById('close-add-loc').addEventListener('click',  ()=>closeModal('modal-add-location'));
 document.getElementById('cancel-add-loc').addEventListener('click', ()=>closeModal('modal-add-location'));
 document.getElementById('confirm-add-loc').addEventListener('click',async()=>{
-  const name=document.getElementById('new-loc-name').value.trim();
-  const addr=document.getElementById('new-loc-addr').value.trim();
+  const name  = document.getElementById('new-loc-name').value.trim();
+  const addr  = document.getElementById('new-loc-addr').value.trim();
+  const color = document.getElementById('new-loc-color').value || '#4a9eff';
   if (!name){showToast('Enter a location name','error');return;}
   try {
-    const saved=await sb('locations','POST',{name,address:addr});
+    const saved=await sb('locations','POST',{name,address:addr,color});
     store.locations.push(saved[0]);
     closeModal('modal-add-location'); renderLocationList();
     showToast('Location added','success');
     document.getElementById('new-loc-name').value='';
     document.getElementById('new-loc-addr').value='';
+    document.getElementById('new-loc-color').value='#4a9eff';
+    document.querySelectorAll('#loc-color-picker div').forEach((d,i)=>d.style.border=i===0?'2px solid white':'2px solid transparent');
   } catch(e){showToast('Error: '+e.message,'error');}
 });
 
