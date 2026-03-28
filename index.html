@@ -1029,6 +1029,8 @@ function performLogout() {
   localStorage.removeItem('citadel_session');
   localStorage.removeItem('citadel_page');
   localStorage.removeItem('citadel_admin_tab');
+  localStorage.removeItem('citadel_more_sub');
+  localStorage.removeItem('citadel_sched_tab');
   document.getElementById('app').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('login-email').value = '';
@@ -1082,6 +1084,7 @@ function showEmpPage(id) {
   currentEmpPage = id;
   localStorage.setItem('citadel_page', id);
   if (id !== 'more') {
+    localStorage.removeItem('citadel_more_sub');
     document.getElementById('sub-incidents').style.display = 'none';
     document.getElementById('sub-crew').style.display = 'none';
     document.getElementById('sub-clocked').style.display = 'none';
@@ -1095,9 +1098,13 @@ function showEmpPage(id) {
 
   if (id==='overview')  renderOverview();
   if (id==='clock')     { loadClockState(); renderClockLog(); startClockTimer(); }
-  if (id==='schedule')  renderMySchedule();
+  if (id==='schedule')  { renderMySchedule(); const savedSchedTab = localStorage.getItem('citadel_sched_tab'); if (savedSchedTab && savedSchedTab !== 'mine') switchSchedTab(savedSchedTab); }
   if (id==='timeoff')   renderTimeOff();
-  if (id==='more')      renderMoreMenu();
+  if (id==='more')      {
+    renderMoreMenu();
+    const savedSub = localStorage.getItem('citadel_more_sub');
+    if (savedSub) showMoreSub(savedSub);
+  }
 }
 
 // ══════════════════════════════════════
@@ -1313,6 +1320,7 @@ function renderClockLog() {
 let empSchedWeekOffset = 0;
 
 function switchSchedTab(tab) {
+  localStorage.setItem('citadel_sched_tab', tab);
   document.getElementById('sched-tab-mine').classList.toggle('active', tab==='mine');
   document.getElementById('sched-tab-all').classList.toggle('active', tab==='all');
   document.getElementById('my-schedule-content').style.display = tab==='mine' ? 'block' : 'none';
@@ -1333,11 +1341,6 @@ function renderMySchedule() {
       <div class="msc-info"><div class="msc-time">${fmt12(s.start)} – ${fmt12(s.end)}</div><div class="msc-loc">📍 ${s.location}</div></div>
     </div>`;
   }).join('');
-  // Reset full schedule tab to mine on re-render
-  document.getElementById('sched-tab-mine').classList.add('active');
-  document.getElementById('sched-tab-all').classList.remove('active');
-  document.getElementById('my-schedule-content').style.display = 'block';
-  document.getElementById('full-schedule-content').style.display = 'none';
 }
 
 function renderFullSchedule() {
@@ -1427,6 +1430,7 @@ function renderMoreMenu() {
 }
 
 function showMoreSub(sub) {
+  localStorage.setItem('citadel_more_sub', sub);
   document.querySelector('.more-grid').style.display='none';
   ['incidents','crew','clocked'].forEach(s=>document.getElementById('sub-'+s).style.display='none');
   document.getElementById('sub-'+sub).style.display='block';
