@@ -657,7 +657,7 @@ tbody td strong{color:var(--white);}
   <div class="modal-overlay" id="modal-add-location">
   <div class="modal">
     <button type="button" class="modal-close" id="close-add-loc">&#10005;</button>
-    <div class="modal-title">Add Location</div>
+    <div class="modal-title" id="loc-modal-title">Add Location</div>
     <div class="field"><label>Location Name</label><input type="text" id="new-loc-name" placeholder="Downtown Office"/></div>
     <div class="field"><label>Address</label><input type="text" id="new-loc-addr" placeholder="123 Main St"/></div>
     <div class="field">
@@ -676,7 +676,7 @@ tbody td strong{color:var(--white);}
     </div>
     <div class="modal-footer">
       <button type="button" class="btn btn-outline btn-sm" id="cancel-add-loc">CANCEL</button>
-      <button type="button" class="btn btn-chrome btn-sm" id="confirm-add-loc">ADD</button>
+      <button type="button" class="btn btn-chrome btn-sm" id="confirm-add-loc">SAVE</button>
     </div>
   </div>
 </div>
@@ -2090,8 +2090,14 @@ function renderLocationList() {
     <div class="emp-card">
       <div class="emp-av" style="background:${l.color||'#6b6b7a'};font-size:14px;color:white;">📍</div>
       <div class="emp-inf"><div class="emp-nm">${l.name}</div><div class="emp-dt">${l.address||''}</div></div>
-      <div class="emp-act"><button type="button" class="btn btn-danger btn-xs" data-remove-loc="${l.id}">REMOVE</button></div>
+      <div class="emp-act">
+        <button type="button" class="btn btn-outline btn-xs" data-edit-loc="${l.id}">EDIT</button>
+        <button type="button" class="btn btn-danger btn-xs" data-remove-loc="${l.id}">REMOVE</button>
+      </div>
     </div>`).join('');
+  list.querySelectorAll('[data-edit-loc]').forEach(btn=>{
+    btn.addEventListener('click',()=>openEditLocation(parseInt(btn.dataset.editLoc)));
+  });
   list.querySelectorAll('[data-remove-loc]').forEach(btn=>{
     btn.addEventListener('click',async()=>{
       const id=parseInt(btn.dataset.removeLoc);
@@ -2103,6 +2109,23 @@ function renderLocationList() {
       } catch(e){showToast('Error: '+e.message,'error');}
     });
   });
+}
+
+let editingLocId = null;
+
+function openEditLocation(id) {
+  const l = store.locations.find(l=>l.id===id);
+  if (!l) return;
+  editingLocId = id;
+  document.getElementById('loc-modal-title').textContent = 'Edit Location';
+  document.getElementById('new-loc-name').value  = l.name;
+  document.getElementById('new-loc-addr').value  = l.address||'';
+  document.getElementById('new-loc-color').value = l.color||'#4a9eff';
+  // Highlight matching color swatch
+  document.querySelectorAll('#loc-color-picker div').forEach(d=>{
+    d.style.border = d.dataset.color === (l.color||'#4a9eff') ? '2px solid white' : '2px solid transparent';
+  });
+  openModal('modal-add-location');
 }
 
 function selectLocColor(el) {
@@ -2348,22 +2371,40 @@ document.getElementById('confirm-delete').addEventListener('click',async()=>{
 });
 
 document.getElementById('open-add-loc').addEventListener('click',   ()=>openModal('modal-add-location'));
-document.getElementById('close-add-loc').addEventListener('click',  ()=>closeModal('modal-add-location'));
-document.getElementById('cancel-add-loc').addEventListener('click', ()=>closeModal('modal-add-location'));
+document.getElementById('close-add-loc').addEventListener('click',  ()=>{ editingLocId=null; document.getElementById('loc-modal-title').textContent='Add Location'; closeModal('modal-add-location'); });
+document.getElementById('cancel-add-loc').addEventListener('click', ()=>{ editingLocId=null; document.getElementById('loc-modal-title').textContent='Add Location'; closeModal('modal-add-location'); });
 document.getElementById('confirm-add-loc').addEventListener('click',async()=>{
   const name  = document.getElementById('new-loc-name').value.trim();
   const addr  = document.getElementById('new-loc-addr').value.trim();
   const color = document.getElementById('new-loc-color').value || '#4a9eff';
   if (!name){showToast('Enter a location name','error');return;}
-  try {
-    const saved=await sb('locations','POST',{name,address:addr,color});
-    store.locations.push(saved[0]);
-    closeModal('modal-add-location'); renderLocationList();
-    showToast('Location added','success');
+
+  const resetModal = () => {
     document.getElementById('new-loc-name').value='';
     document.getElementById('new-loc-addr').value='';
     document.getElementById('new-loc-color').value='#4a9eff';
+    document.getElementById('loc-modal-title').textContent='Add Location';
     document.querySelectorAll('#loc-color-picker div').forEach((d,i)=>d.style.border=i===0?'2px solid white':'2px solid transparent');
+    editingLocId = null;
+  };
+
+  try {
+    if (editingLocId) {
+      await sb('locations','PATCH',{name,address:addr,color},`?id=eq.${editingLocId}`);
+      const l = store.locations.find(l=>l.id===editingLocId);
+      if (l) { l.name=name; l.address=addr; l.color=color; }
+      closeModal('modal-add-location');
+      resetModal();
+      renderLocationList();
+      showToast('Location updated','success');
+    } else {
+      const saved=await sb('locations','POST',{name,address:addr,color});
+      store.locations.push(saved[0]);
+      closeModal('modal-add-location');
+      resetModal();
+      renderLocationList();
+      showToast('Location added','success');
+    }
   } catch(e){showToast('Error: '+e.message,'error');}
 });
 
