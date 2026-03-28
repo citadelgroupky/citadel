@@ -1014,6 +1014,7 @@ function performLogout() {
   if (clockIntervalId) { clearInterval(clockIntervalId); clockIntervalId = null; }
   localStorage.removeItem('citadel_session');
   localStorage.removeItem('citadel_page');
+  localStorage.removeItem('citadel_admin_tab');
   document.getElementById('app').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('login-email').value = '';
@@ -1101,7 +1102,7 @@ function showAdminPage(id) {
   if (id==='aentries')   { renderDashEntries(); document.getElementById('dash-entries-emp')?.addEventListener('change',renderDashEntries); document.getElementById('dash-entries-date')?.addEventListener('change',renderDashEntries); }
   if (id==='atimeoff')   renderAdminTimeOff();
   if (id==='aincidents') renderAdminIncidents();
-  if (id==='apanel')     renderAdminPanel();
+  if (id==='apanel')     { renderAdminPanel(); const savedTab = localStorage.getItem('citadel_admin_tab'); if (savedTab) switchAdminTab(savedTab); }
 }
 
 // ══════════════════════════════════════
@@ -2137,6 +2138,7 @@ function selectLocColor(el) {
   document.getElementById('new-loc-color').value = el.dataset.color;
 }
 function switchAdminTab(tab) {
+  localStorage.setItem('citadel_admin_tab', tab);
   ['employees','locations','settings'].forEach(t=>{
     document.getElementById('atab-'+t).classList.toggle('active',t===tab);
     document.getElementById('admin-'+t).classList.toggle('active',t===tab);
