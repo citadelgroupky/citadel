@@ -891,7 +891,7 @@ async function loadAllData() {
     });
     store.shifts        = shifts.map(s=>({...s, userId:s.user_id, start:s.start_time, end:s.end_time}));
     store.timeEntries   = entries.map(e=>({...e, userId:e.user_id, clockIn:e.clock_in, clockOut:e.clock_out, location:e.site}));
-    store.incidents     = incidents.map(i=>({...i, userId:i.user_id, datetime:i.incident_datetime, datetimeEnd:i.incident_datetime_end, desc:i.description, actions:i.actions_taken, mediaUrls: i.media_urls ? JSON.parse(i.media_urls) : []}));
+    store.incidents     = incidents.map(i=>({...i, userId:i.user_id, datetime:i.incident_datetime, datetimeEnd:i.incident_datetime_end, desc:i.description, actions:i.actions_taken, mediaUrls:[]}));
     store.timeOffRequests = timeoff.map(r=>({...r, userId:r.user_id, from:r.from_date, to:r.to_date}));
     // Auto-remove approved requests whose end date has passed
     const expiredApproved = store.timeOffRequests.filter(r=>r.status==='Approved' && r.to < today());
@@ -1101,9 +1101,12 @@ function showEmpPage(id) {
   if (id==='schedule')  { renderMySchedule(); const savedSchedTab = localStorage.getItem('citadel_sched_tab'); if (savedSchedTab && savedSchedTab !== 'mine') switchSchedTab(savedSchedTab); }
   if (id==='timeoff')   renderTimeOff();
   if (id==='more')      {
-    renderMoreMenu();
     const savedSub = localStorage.getItem('citadel_more_sub');
-    if (savedSub) showMoreSub(savedSub);
+    if (savedSub) {
+      showMoreSub(savedSub);
+    } else {
+      renderMoreMenu();
+    }
   }
 }
 
@@ -1534,9 +1537,37 @@ async function uploadIncidentMedia(incidentId) {
   }
   return urls;
 }
-// ══════════════════════════════════════
-// INCIDENTS
-// ══════════════════════════════════════
+async function loadIncidentMedia(incidentId) {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/list/incident-media`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ prefix: `${incidentId}/`, limit: 20 })
+    });
+    if (!res.ok) return [];
+    const files = await res.json();
+    return files.map(f => `${SUPABASE_URL}/storage/v1/object/public/incident-media/${incidentId}/${f.name}`);
+  } catch(e) { return []; }
+}
+
+async function renderIncidentMedia(incidentId, containerId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  el.innerHTML = '<span style="font-size:11px;color:var(--silver);">Loading media...</span>';
+  const urls = await loadIncidentMedia(incidentId);
+  if (!urls.length) { el.innerHTML = ''; return; }
+  el.innerHTML = urls.map(url => {
+    const isVideo = url.match(/\.(mp4|mov|avi|webm|mkv)/i);
+    return isVideo
+      ? `<video src="${url}" controls style="width:120px;height:90px;object-fit:cover;border-radius:6px;border:1px solid var(--border-bright);"></video>`
+      : `<a href="${url}" target="_blank"><img src="${url}" style="width:90px;height:90px;object-fit:cover;border-radius:6px;border:1px solid var(--border-bright);"/></a>`;
+  }).join('');
+}
+
 function setSeverity(sev) {
   selectedSev = sev;
   ['Low','Medium','High'].forEach(s=>{
@@ -1580,14 +1611,6 @@ async function submitIncident() {
     if (incMediaFiles.length) {
       showToast('Uploading media...', 'success');
       mediaUrls = await uploadIncidentMedia(incidentId);
-      // Save URLs back to the incident record
-      if (mediaUrls.length) {
-        try {
-          await sb('incidents','PATCH',{media_urls: JSON.stringify(mediaUrls)},`?id=eq.${incidentId}`);
-        } catch(e) {
-          console.error('Could not save media URLs to incident:', e);
-        }
-      }
     }
 
     const mapped = {
@@ -1669,17 +1692,10 @@ function incHtml(i, showUser) {
         <div style="font-family:'Barlow Condensed',sans-serif;font-size:9px;letter-spacing:2px;color:var(--silver);margin-bottom:6px;">ACTIONS TAKEN</div>
         <div class="inc-body" style="font-size:13px;line-height:1.6;color:var(--silver-light);">${i.actions}</div>
       </div>`:''}
-      ${i.mediaUrls&&i.mediaUrls.length?`<div style="margin-top:10px;">
-        <div style="font-family:'Barlow Condensed',sans-serif;font-size:9px;letter-spacing:2px;color:var(--silver);margin-bottom:8px;">MEDIA (${i.mediaUrls.length})</div>
-        <div style="display:flex;flex-wrap:wrap;gap:8px;">
-          ${i.mediaUrls.map(url=>{
-            const isVideo = url.match(/\.(mp4|mov|avi|webm|mkv)/i);
-            return isVideo
-              ? `<video src="${url}" controls style="width:120px;height:90px;object-fit:cover;border-radius:6px;border:1px solid var(--border-bright);"></video>`
-              : `<a href="${url}" target="_blank"><img src="${url}" style="width:90px;height:90px;object-fit:cover;border-radius:6px;border:1px solid var(--border-bright);"/></a>`;
-          }).join('')}
-        </div>
-      </div>`:''}
+      <div style="margin-top:10px;">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:9px;letter-spacing:2px;color:var(--silver);margin-bottom:8px;">MEDIA</div>
+        <div id="inc-media-${i.id}" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+      </div>
     </div>`;
   } else {
     // Employee compact view
@@ -2094,6 +2110,8 @@ function renderAdminIncidents() {
   const list=document.getElementById('admin-incident-list');
   if (!store.incidents.length){list.innerHTML=`<div class="empty">No incidents on record.</div>`;return;}
   list.innerHTML=store.incidents.map(i=>incHtml(i,true)).join('');
+  // Load media for each incident from Storage
+  store.incidents.forEach(i => renderIncidentMedia(i.id, `inc-media-${i.id}`));
 }
 
 async function deleteIncident(id) {
