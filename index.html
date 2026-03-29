@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://agznogsjlufjvfecjyld.supabase.co https://citadelgroupky.github.io; img-src 'self' data:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.onesignal.com https://cdn.onesignal.com/sdks/web/v16/; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.onesignal.com; font-src https://fonts.gstatic.com https://cdn.onesignal.com; connect-src 'self' https://agznogsjlufjvfecjyld.supabase.co https://citadelgroupky.github.io https://*.supabase.co wss://*.supabase.co https://onesignal.com https://*.onesignal.com https://api.resend.com; img-src 'self' data: blob: https://*.supabase.co https://agznogsjlufjvfecjyld.supabase.co; media-src 'self' blob: https://*.supabase.co https://agznogsjlufjvfecjyld.supabase.co; worker-src 'self' blob: https://cdn.onesignal.com;">
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json"/>
@@ -16,6 +16,8 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png"/>
 <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png"/>
 <title>Citadel Group</title>
+<!-- OneSignal Push Notifications -->
+<script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600&family=Barlow+Condensed:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
 <style>
 :root{
@@ -595,7 +597,9 @@ tbody td strong{color:var(--white);}
         <div class="card" style="max-width:480px;">
           <div class="card-title">Settings</div>
           <div class="field"><label>Business Name</label><input type="text" id="setting-biz" value="Citadel Group Security Solutions"/></div>
-          <div class="field"><label>Incident Report Email</label><input type="email" id="setting-email" placeholder="reports@citadelgroup.com"/></div>
+          <div class="field"><label>Incident Report Email</label><input type="email" id="setting-email" placeholder="citadelgroupky@gmail.com"/></div>
+          <div class="field"><label>Resend API Key</label><input type="password" id="setting-resend-key" placeholder="re_xxxxxxxxxxxxxxxx" autocomplete="off"/><div style="font-size:10px;color:var(--silver-dark);margin-top:4px;">Get a free key at resend.com — enables automatic incident report emails</div></div>
+          <div class="field"><label>OneSignal App ID</label><input type="text" id="setting-onesignal-id" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off"/><div style="font-size:10px;color:var(--silver-dark);margin-top:4px;">Get your App ID at app.onesignal.com — enables push notifications</div></div>
           <div class="field">
             <label>Pay Period</label>
             <select id="setting-payperiod">
@@ -903,9 +907,12 @@ async function loadAllData() {
     }
     if (settings && settings[0]) {
       const s = settings[0];
-      store.settings = { email: s.incident_email||'', payPeriod: s.pay_period||'biweekly', bizName: s.biz_name||'Citadel Group Security Solutions' };
+      store.settings = { email: s.incident_email||'', payPeriod: s.pay_period||'biweekly', bizName: s.biz_name||'Citadel Group Security Solutions', resendKey: s.resend_api_key||'', onesignalId: s.onesignal_app_id||'' };
       store.adminPasswords = [s.admin_pass1||'admin123', s.admin_pass2||'admin456'];
       store._settingsId = s.id;
+      // Apply saved API keys at boot
+      if (s.resend_api_key) window.RESEND_API_KEY = s.resend_api_key;
+      if (s.onesignal_app_id) window.ONESIGNAL_APP_ID = s.onesignal_app_id;
     }
   } catch(e) {
     showToast('Error loading data: '+e.message, 'error');
@@ -1044,6 +1051,10 @@ function performLogout() {
 function initApp() {
   // Persist session so page refresh doesn't log out
   localStorage.setItem('citadel_session', JSON.stringify(currentUser));
+  // Register with OneSignal now that we know the user
+  if (currentUser && currentUser.role !== 'admin') {
+    initOneSignal();
+  }
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
 
@@ -1513,10 +1524,9 @@ async function uploadIncidentMedia(incidentId) {
     const ext = file.name.split('.').pop().toLowerCase();
     const path = `${incidentId}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
     try {
-      console.log('Uploading to:', `${SUPABASE_URL}/storage/v1/object/incident-media/${path}`);
-      console.log('File:', file.name, file.type, file.size);
+      // Supabase Storage requires PUT (not POST) for direct binary uploads
       const res = await fetch(`${SUPABASE_URL}/storage/v1/object/incident-media/${path}`, {
-        method: 'POST',
+        method: 'PUT',
         headers: {
           'apikey': SUPABASE_KEY,
           'Authorization': `Bearer ${SUPABASE_KEY}`,
@@ -1526,30 +1536,32 @@ async function uploadIncidentMedia(incidentId) {
         },
         body: file
       });
-      const responseText = await res.text();
-      console.log('Upload response:', res.status, responseText);
       if (res.ok) {
         const url = `${SUPABASE_URL}/storage/v1/object/public/incident-media/${path}`;
         urls.push(url);
-        console.log('Upload success:', url);
       } else {
-        showToast('Upload failed: ' + res.status + ' ' + responseText, 'error');
+        const errText = await res.text();
+        console.error('Upload failed:', res.status, errText);
+        showToast(`Media upload failed (${res.status}): ${errText}`, 'error');
       }
     } catch(e) {
       console.error('Upload exception:', e);
-      showToast('Upload error: ' + e.message, 'error');
+      showToast('Media upload error: ' + e.message, 'error');
     }
   }
   return urls;
 }
 async function loadIncidentMedia(incidentId) {
   try {
-    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/list/incident-media?prefix=${incidentId}/&limit=20`, {
-      method: 'GET',
+    // Supabase Storage list API requires POST with JSON body
+    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/list/incident-media`, {
+      method: 'POST',
       headers: {
         'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`
-      }
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ prefix: `${incidentId}/`, limit: 100, offset: 0 })
     });
     if (!res.ok) return [];
     const files = await res.json();
@@ -1557,9 +1569,9 @@ async function loadIncidentMedia(incidentId) {
     return files
       .filter(f => f.name && !f.name.endsWith('/'))
       .map(f => `${SUPABASE_URL}/storage/v1/object/public/incident-media/${incidentId}/${f.name}`);
-  } catch(e) { 
+  } catch(e) {
     console.error('loadIncidentMedia error:', e);
-    return []; 
+    return [];
   }
 }
 
@@ -1641,6 +1653,8 @@ async function submitIncident() {
     };
     store.incidents.unshift(mapped);
     showToast('Report submitted','success');
+    // Auto-email incident report
+    emailIncidentReport(saved[0], mediaUrls).catch(e => console.warn('Email error:', e));
     ['inc-title','inc-location','inc-datetime','inc-datetime-end','inc-desc','inc-actions'].forEach(id=>{
       const el = document.getElementById(id); if(el) el.value='';
     });
@@ -1924,6 +1938,15 @@ async function saveShift() {
     closeModal('modal-add-shift');
     renderAdminSchedule();
     showToast('Shift saved','success');
+    // Notify employee + queue shift reminder
+    const emp = store.users.find(u => u.id === pendingShift.userId);
+    const empName = emp ? emp.name : 'Employee';
+    await queuePushNotification(
+      'New Shift Posted — Citadel',
+      empName + ' has a new shift on ' + mapped.date + ' at ' + mapped.start + (mapped.location ? ' (' + mapped.location + ')' : ''),
+      { type: 'shift_posted', shiftId: mapped.id }
+    );
+    await scheduleShiftReminder(mapped, empName);
   } catch(e) { showToast('Error: '+e.message,'error'); }
 }
 
@@ -2310,13 +2333,21 @@ async function saveSettings() {
   const biz = document.getElementById('setting-biz').value;
   const em  = document.getElementById('setting-email').value;
   const pp  = document.getElementById('setting-payperiod').value;
+  const resendKey = document.getElementById('setting-resend-key').value;
+  const osId = document.getElementById('setting-onesignal-id').value;
   const updates = {biz_name:biz, incident_email:em, pay_period:pp};
+  if (resendKey) updates.resend_api_key = resendKey;
+  if (osId) updates.onesignal_app_id = osId;
   if (p1) { updates.admin_pass1=p1; store.adminPasswords[0]=p1; }
   if (p2) { updates.admin_pass2=p2; store.adminPasswords[1]=p2; }
   try {
     const sid = store._settingsId || 1;
     await sb('settings','PATCH',updates,`?id=eq.${sid}`);
     store.settings = {email:em, payPeriod:pp, bizName:biz};
+    if (resendKey) { store.settings.resendKey = resendKey; window.RESEND_API_KEY = resendKey; }
+    if (osId) { store.settings.onesignalId = osId; }
+    document.getElementById('setting-resend-key').value = '';
+    document.getElementById('setting-onesignal-id').value = '';
     document.getElementById('setting-pass1').value='';
     document.getElementById('setting-pass2').value='';
     showToast('Settings saved','success');
@@ -2588,6 +2619,157 @@ document.getElementById('confirm-add-shift').addEventListener('click',saveShift)
 document.querySelectorAll('.modal-overlay').forEach(o=>{
   o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open');});
 });
+
+// ══════════════════════════════════════
+// PUSH NOTIFICATIONS — OneSignal
+// ══════════════════════════════════════
+// Replace with your OneSignal App ID from app.onesignal.com
+const ONESIGNAL_APP_ID = 'YOUR_ONESIGNAL_APP_ID';
+
+window.OneSignalDeferred = window.OneSignalDeferred || [];
+
+async function initOneSignal() {
+  const activeOSId = (window.ONESIGNAL_APP_ID && window.ONESIGNAL_APP_ID !== 'YOUR_ONESIGNAL_APP_ID') ? window.ONESIGNAL_APP_ID : ONESIGNAL_APP_ID;
+  if (!activeOSId || activeOSId === 'YOUR_ONESIGNAL_APP_ID') return;
+  OneSignalDeferred.push(async function(OneSignal) {
+    await OneSignal.init({
+      appId: activeOSId,
+      notifyButton: { enable: false },
+    });
+    if (currentUser && currentUser.id) {
+      await OneSignal.login(String(currentUser.id));
+      await OneSignal.User.addTag('role', currentUser.role);
+      if (currentUser.name) await OneSignal.User.addTag('name', currentUser.name);
+    }
+    const permission = await OneSignal.Notifications.permissionNative;
+    if (permission === 'default') {
+      await OneSignal.Notifications.requestPermission();
+    }
+  });
+}
+
+async function oneSignalLogin(user) {
+  if (!ONESIGNAL_APP_ID || ONESIGNAL_APP_ID === 'YOUR_ONESIGNAL_APP_ID') return;
+  OneSignalDeferred.push(async function(OneSignal) {
+    try {
+      await OneSignal.login(String(user.id));
+      await OneSignal.User.addTag('role', user.role);
+      if (user.name) await OneSignal.User.addTag('name', user.name);
+    } catch(e) { console.warn('OneSignal login error:', e); }
+  });
+}
+
+// Stores notification request in Supabase `notifications` table.
+// A Supabase Edge Function (or GitHub Action) reads this table and
+// calls the OneSignal REST API with the server API key (never expose
+// the OneSignal REST API key in client-side code).
+async function queuePushNotification(title, body, data) {
+  if (!ONESIGNAL_APP_ID || ONESIGNAL_APP_ID === 'YOUR_ONESIGNAL_APP_ID') return;
+  try {
+    await sb('notifications', 'POST', {
+      title,
+      body,
+      data: JSON.stringify(data || {}),
+      sent: false,
+      created_at: new Date().toISOString()
+    });
+  } catch(e) { console.warn('queuePushNotification error:', e); }
+}
+
+async function scheduleShiftReminder(shift, employeeName) {
+  if (!ONESIGNAL_APP_ID || ONESIGNAL_APP_ID === 'YOUR_ONESIGNAL_APP_ID') return;
+  try {
+    const reminderTime = new Date(shift.date + 'T09:00:00');
+    if (reminderTime < new Date()) return;
+    await sb('scheduled_notifications', 'POST', {
+      user_id: shift.userId,
+      title: 'Shift Reminder — Citadel',
+      body: 'You have a shift today at ' + shift.start + ' (' + (shift.location || 'TBD') + ')',
+      send_at: reminderTime.toISOString(),
+      sent: false
+    });
+  } catch(e) { console.warn('scheduleShiftReminder error:', e); }
+}
+
+// ══════════════════════════════════════
+// EMAIL — Resend
+// ══════════════════════════════════════
+// Paste your Resend API key here, OR leave as-is and set up a Supabase
+// Edge Function to read the `email_queue` table and send via Resend.
+// Keeping the key here is fine for an internal app but for production
+// route through an Edge Function so the key stays server-side.
+const RESEND_API_KEY = 'YOUR_RESEND_API_KEY';
+const INCIDENT_REPORT_TO = 'citadelgroupky@gmail.com';
+
+async function emailIncidentReport(incident, mediaUrls) {
+  const toAddress = (store.settings && store.settings.email) ? store.settings.email : INCIDENT_REPORT_TO;
+  const reporterName = (store.users || []).find(u => u.id === incident.user_id)?.name || 'Unknown';
+
+  const activeResendKey = (window.RESEND_API_KEY && window.RESEND_API_KEY !== 'YOUR_RESEND_API_KEY') ? window.RESEND_API_KEY : RESEND_API_KEY;
+  if (!activeResendKey || activeResendKey === 'YOUR_RESEND_API_KEY') {
+    // Queue it in Supabase for a backend process
+    try {
+      await sb('email_queue', 'POST', {
+        to: toAddress,
+        subject: '[Incident Report] ' + incident.title + ' — ' + incident.severity + ' Severity',
+        html: buildIncidentEmailHtml(incident, reporterName, mediaUrls),
+        sent: false,
+        created_at: new Date().toISOString()
+      });
+      console.log('Incident report queued for email delivery.');
+    } catch(e) { console.warn('email_queue insert error:', e); }
+    return;
+  }
+
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + activeResendKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        from: 'Citadel Reports <onboarding@resend.dev>',
+        to: [toAddress],
+        subject: '[Incident Report] ' + incident.title + ' — ' + incident.severity + ' Severity',
+        html: buildIncidentEmailHtml(incident, reporterName, mediaUrls)
+      })
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      console.warn('Resend email failed:', res.status, err);
+    } else {
+      console.log('Incident report emailed via Resend.');
+    }
+  } catch(e) { console.warn('emailIncidentReport error:', e); }
+}
+
+function buildIncidentEmailHtml(incident, reporterName, mediaUrls) {
+  const dt = incident.incident_datetime
+    ? new Date(incident.incident_datetime).toLocaleString('en-US', {month:'long',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'})
+    : 'N/A';
+  const sevColor = incident.severity === 'High' ? '#c04040' : incident.severity === 'Medium' ? '#b8a060' : '#40a060';
+  const mediaSection = (mediaUrls && mediaUrls.length)
+    ? '<p><strong>Media (' + mediaUrls.length + ' file' + (mediaUrls.length > 1 ? 's' : '') + '):</strong><br>' +
+      mediaUrls.map(function(u){ return '<a href="' + u + '">' + u + '</a>'; }).join('<br>') + '</p>'
+    : '';
+  return '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#f9f9f9;padding:24px;border-radius:8px;">' +
+    '<div style="background:#0a0a0c;padding:16px 24px;border-radius:6px;margin-bottom:20px;">' +
+    '<h1 style="color:#e2e2ee;font-size:18px;margin:0;letter-spacing:2px;">CITADEL GROUP SECURITY SOLUTIONS</h1>' +
+    '<p style="color:#9a9aaa;font-size:12px;margin:4px 0 0;letter-spacing:1px;">INCIDENT REPORT</p></div>' +
+    '<table style="width:100%;border-collapse:collapse;">' +
+    '<tr><td style="padding:8px 0;color:#555;width:140px;"><strong>Title</strong></td><td>' + incident.title + '</td></tr>' +
+    '<tr><td style="padding:8px 0;color:#555;"><strong>Severity</strong></td><td><span style="background:' + sevColor + ';color:#fff;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:bold;">' + incident.severity + '</span></td></tr>' +
+    '<tr><td style="padding:8px 0;color:#555;"><strong>Location</strong></td><td>' + incident.location + '</td></tr>' +
+    '<tr><td style="padding:8px 0;color:#555;"><strong>Date &amp; Time</strong></td><td>' + dt + '</td></tr>' +
+    '<tr><td style="padding:8px 0;color:#555;"><strong>Reported By</strong></td><td>' + reporterName + '</td></tr>' +
+    '</table><hr style="border:none;border-top:1px solid #ddd;margin:16px 0;"/>' +
+    '<p><strong>Description:</strong></p>' +
+    '<p style="background:#fff;padding:12px;border-radius:4px;border:1px solid #ddd;">' + (incident.description || '').replace(/\n/g, '<br>') + '</p>' +
+    (incident.actions_taken ? '<p><strong>Actions Taken:</strong></p><p style="background:#fff;padding:12px;border-radius:4px;border:1px solid #ddd;">' + incident.actions_taken.replace(/\n/g, '<br>') + '</p>' : '') +
+    mediaSection +
+    '<p style="color:#aaa;font-size:11px;margin-top:24px;">Auto-generated by Citadel Group workforce management system.</p></div>';
+}
 
 // ── SERVICE WORKER REGISTRATION ──
 if ('serviceWorker' in navigator) {
