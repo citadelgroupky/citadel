@@ -18,6 +18,9 @@
 <title>Citadel Group</title>
 <!-- OneSignal Push Notifications -->
 <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+<!-- EmailJS -->
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script>emailjs.init("WaXrQM0JkHC8coTG_");</script>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600&family=Barlow+Condensed:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
 <style>
 :root{
@@ -2704,44 +2707,20 @@ const INCIDENT_REPORT_TO = 'citadelgroupky@gmail.com';
 async function emailIncidentReport(incident, mediaUrls) {
   const toAddress = (store.settings && store.settings.email) ? store.settings.email : INCIDENT_REPORT_TO;
   const reporterName = (store.users || []).find(u => u.id === incident.user_id)?.name || 'Unknown';
-
-  const activeResendKey = (window.RESEND_API_KEY && window.RESEND_API_KEY !== 'YOUR_RESEND_API_KEY') ? window.RESEND_API_KEY : RESEND_API_KEY;
-  if (!activeResendKey || activeResendKey === 'YOUR_RESEND_API_KEY') {
-    // Queue it in Supabase for a backend process
-    try {
-      await sb('email_queue', 'POST', {
-        to: toAddress,
-        subject: '[Incident Report] ' + incident.title + ' — ' + incident.severity + ' Severity',
-        html: buildIncidentEmailHtml(incident, reporterName, mediaUrls),
-        sent: false,
-        created_at: new Date().toISOString()
-      });
-      console.log('Incident report queued for email delivery.');
-    } catch(e) { console.warn('email_queue insert error:', e); }
-    return;
-  }
-
+  const dt = incident.incident_datetime
+    ? new Date(incident.incident_datetime).toLocaleString('en-US', {month:'long',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'})
+    : 'N/A';
+  const mediaList = (mediaUrls && mediaUrls.length) ? mediaUrls.join('\n') : 'No media attached';
   try {
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + activeResendKey,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        from: 'Citadel Reports <onboarding@resend.dev>',
-        to: [toAddress],
-        subject: '[Incident Report] ' + incident.title + ' — ' + incident.severity + ' Severity',
-        html: buildIncidentEmailHtml(incident, reporterName, mediaUrls)
-      })
+    await emailjs.send('service_wucem8b', 'template_lgru2bj', {
+      to_email: toAddress,
+      subject: '[Incident Report] ' + incident.title + ' — ' + incident.severity + ' Severity',
+      message: 'INCIDENT REPORT\n\nTitle: ' + incident.title + '\nSeverity: ' + incident.severity + '\nLocation: ' + incident.location + '\nDate/Time: ' + dt + '\nReported By: ' + reporterName + '\n\nDescription:\n' + (incident.description||'') + '\n\nActions Taken:\n' + (incident.actions_taken||'N/A') + '\n\nMedia:\n' + mediaList
     });
-    if (!res.ok) {
-      const err = await res.text();
-      console.warn('Resend email failed:', res.status, err);
-    } else {
-      console.log('Incident report emailed via Resend.');
-    }
-  } catch(e) { console.warn('emailIncidentReport error:', e); }
+    console.log('Incident report emailed via EmailJS.');
+  } catch(e) {
+    console.warn('emailIncidentReport error:', e);
+  }
 }
 
 function buildIncidentEmailHtml(incident, reporterName, mediaUrls) {
