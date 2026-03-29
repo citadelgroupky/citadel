@@ -2697,31 +2697,68 @@ async function scheduleShiftReminder(shift, employeeName) {
 }
 
 // ══════════════════════════════════════
-// EMAIL — Resend
+// EMAIL — EmailJS
 // ══════════════════════════════════════
-// Paste your Resend API key here, OR leave as-is and set up a Supabase
-// Edge Function to read the `email_queue` table and send via Resend.
-// Keeping the key here is fine for an internal app but for production
-// route through an Edge Function so the key stays server-side.
-const RESEND_API_KEY = 'YOUR_RESEND_API_KEY';
 const INCIDENT_REPORT_TO = 'citadelgroupky@gmail.com';
 
 async function emailIncidentReport(incident, mediaUrls) {
   const toAddress = (store.settings && store.settings.email) ? store.settings.email : INCIDENT_REPORT_TO;
-  const reporterName = (store.users || []).find(u => u.id === incident.user_id)?.name || 'Unknown';
+
+  // Resolve reporter name: prefer currentUser (always available), fall back to store.users
+  const reporterName = (currentUser && currentUser.name)
+    ? currentUser.name
+    : ((store.users || []).find(u => u.id === incident.user_id)?.name || 'Unknown');
+
   const dt = incident.incident_datetime
     ? new Date(incident.incident_datetime).toLocaleString('en-US', {month:'long',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'})
     : 'N/A';
-  const mediaList = (mediaUrls && mediaUrls.length) ? mediaUrls.join('\n') : 'No media attached';
+
+  const mediaList = (mediaUrls && mediaUrls.length)
+    ? mediaUrls.map((u, i) => (i + 1) + '. ' + u).join('\n')
+    : 'No media attached';
+
+  // These variable names must match your EmailJS template placeholders exactly.
+  // In your template editor, use: {{to_email}}, {{subject}}, {{reporter_name}},
+  // {{severity}}, {{location}}, {{incident_datetime}}, {{description}},
+  // {{actions_taken}}, {{media_links}}, {{message}}
+  const templateParams = {
+    to_email:          toAddress,
+    subject:           '[Incident Report] ' + incident.title + ' — ' + incident.severity + ' Severity',
+    reporter_name:     reporterName,
+    severity:          incident.severity || 'N/A',
+    location:          incident.location || 'N/A',
+    incident_datetime: dt,
+    description:       incident.description || 'N/A',
+    actions_taken:     incident.actions_taken || 'N/A',
+    media_links:       mediaList,
+    // 'message' is a catch-all plain-text body in case your template uses {{message}}
+    message: [
+      'INCIDENT REPORT',
+      '',
+      'Title:       ' + incident.title,
+      'Severity:    ' + incident.severity,
+      'Location:    ' + incident.location,
+      'Date/Time:   ' + dt,
+      'Reported By: ' + reporterName,
+      '',
+      'Description:',
+      incident.description || 'N/A',
+      '',
+      'Actions Taken:',
+      incident.actions_taken || 'N/A',
+      '',
+      'Media:',
+      mediaList
+    ].join('\n')
+  };
+
   try {
-    await emailjs.send('service_wucem8b', 'template_lgru2bj', {
-      to_email: toAddress,
-      subject: '[Incident Report] ' + incident.title + ' — ' + incident.severity + ' Severity',
-      message: 'INCIDENT REPORT\n\nTitle: ' + incident.title + '\nSeverity: ' + incident.severity + '\nLocation: ' + incident.location + '\nDate/Time: ' + dt + '\nReported By: ' + reporterName + '\n\nDescription:\n' + (incident.description||'') + '\n\nActions Taken:\n' + (incident.actions_taken||'N/A') + '\n\nMedia:\n' + mediaList
-    });
-    console.log('Incident report emailed via EmailJS.');
+    const result = await emailjs.send('service_wucem8b', 'template_lgru2bj', templateParams);
+    console.log('Incident report emailed via EmailJS. Status:', result.status, result.text);
+    showToast('Report emailed to management', 'success');
   } catch(e) {
     console.warn('emailIncidentReport error:', e);
+    // Don't block the user — report was saved, email is best-effort
   }
 }
 
