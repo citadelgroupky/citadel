@@ -2638,6 +2638,8 @@ async function initOneSignal() {
     await OneSignal.init({
       appId: activeOSId,
       notifyButton: { enable: false },
+      serviceWorkerParam: { scope: '/' },
+      serviceWorkerPath: '/OneSignalSDKWorker.js',
     });
     if (currentUser && currentUser.id) {
       await OneSignal.login(String(currentUser.id));
