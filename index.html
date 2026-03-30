@@ -1661,8 +1661,8 @@ async function submitIncident() {
     };
     store.incidents.unshift(mapped);
     showToast('Report submitted','success');
-    // Auto-email incident report
-    emailIncidentReport(saved[0], mediaUrls).catch(e => console.warn('Email error:', e));
+    // Auto-email incident report — delayed so 'Report submitted' toast shows first
+    setTimeout(() => emailIncidentReport(saved[0], mediaUrls), 1200);
     ['inc-title','inc-location','inc-datetime','inc-datetime-end','inc-desc','inc-actions'].forEach(id=>{
       const el = document.getElementById(id); if(el) el.value='';
     });
@@ -2707,6 +2707,8 @@ async function scheduleShiftReminder(shift, employeeName) {
 const INCIDENT_REPORT_TO = 'citadelgroupky@gmail.com';
 
 async function emailIncidentReport(incident, mediaUrls) {
+  // Re-initialize EmailJS in case the SDK wasn't ready at page load
+  try { emailjs.init('WaXrQM0JkHC8coTG_'); } catch(e) {}
   const toAddress = (store.settings && store.settings.email) ? store.settings.email : INCIDENT_REPORT_TO;
 
   // Resolve reporter name: prefer currentUser (always available), fall back to store.users
