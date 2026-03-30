@@ -1630,6 +1630,24 @@ async function submitIncident() {
   submitBtn.disabled = true;
   submitBtn.textContent = 'SUBMITTING...';
 
+  // Encode media as base64 BEFORE posting so it's included in the initial INSERT
+  let mediaUrls = [];
+  const uploadInput = document.getElementById('inc-media-upload');
+  const cameraInput = document.getElementById('inc-media-camera');
+  let allFiles = [...incMediaFiles];
+  if (uploadInput && uploadInput.files.length) allFiles.push(...Array.from(uploadInput.files));
+  if (cameraInput && cameraInput.files.length) allFiles.push(...Array.from(cameraInput.files));
+  allFiles = allFiles.filter((f,i,a) => a.findIndex(x=>x.name===f.name&&x.size===f.size)===i);
+  if (allFiles.length) {
+    showToast('Saving ' + allFiles.length + ' photo(s)...', 'success');
+    mediaUrls = await Promise.all(allFiles.map(f => new Promise((res, rej) => {
+      const reader = new FileReader();
+      reader.onload = e => res(e.target.result);
+      reader.onerror = rej;
+      reader.readAsDataURL(f);
+    })));
+  }
+
   const payload = {
     user_id: currentUser.id,
     title,
@@ -1637,39 +1655,14 @@ async function submitIncident() {
     incident_datetime: datetime || new Date().toISOString().slice(0,16),
     severity: selectedSev,
     description: fullDesc,
-    actions_taken: actions
+    actions_taken: actions,
+    media_urls: mediaUrls.length ? JSON.stringify(mediaUrls) : null
   };
 
   try {
     const saved = await sb('incidents','POST', payload);
     if (!saved || !saved[0]) throw new Error('No data returned from server');
     const incidentId = saved[0].id;
-
-    // Encode media as base64 and store directly on the incident row — no Storage bucket needed
-    let mediaUrls = [];
-    const uploadInput = document.getElementById('inc-media-upload');
-    const cameraInput = document.getElementById('inc-media-camera');
-    let allFiles = [...incMediaFiles];
-    if (uploadInput && uploadInput.files.length) allFiles.push(...Array.from(uploadInput.files));
-    if (cameraInput && cameraInput.files.length) allFiles.push(...Array.from(cameraInput.files));
-    allFiles = allFiles.filter((f,i,a) => a.findIndex(x=>x.name===f.name&&x.size===f.size)===i);
-    if (allFiles.length) {
-      showToast('Saving media...', 'success');
-      const base64List = await Promise.all(allFiles.map(f => new Promise((res, rej) => {
-        const reader = new FileReader();
-        reader.onload = e => res(e.target.result);
-        reader.onerror = rej;
-        reader.readAsDataURL(f);
-      })));
-      try {
-        await sb('incidents','PATCH',{media_urls: JSON.stringify(base64List)},`?id=eq.${incidentId}`);
-        mediaUrls = base64List;
-        showToast('Media saved', 'success');
-      } catch(e) {
-        console.error('Media save failed:', e);
-        showToast('Media save failed: ' + e.message, 'error');
-      }
-    }
 
     const mapped = {
       ...saved[0],
