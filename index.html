@@ -1493,10 +1493,10 @@ async function renderClockedIn() {
 let incMediaFiles = [];
 
 function handleMediaSelect(input) {
-  const files = Array.from(input.files);
+  const files = Array.from(input.files).map(f => new File([f], f.name, {type: f.type, lastModified: f.lastModified}));
   incMediaFiles = [...incMediaFiles, ...files];
   renderMediaPreview();
-  input.value = ''; // reset so same file can be added again
+  // Don't reset input.value — resetting invalidates File objects in Chrome
 }
 
 function renderMediaPreview() {
