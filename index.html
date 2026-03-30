@@ -1494,9 +1494,12 @@ let incMediaFiles = [];
 
 function handleMediaSelect(input) {
   const files = Array.from(input.files);
-  incMediaFiles = [...incMediaFiles, ...files];
+  // Clone each file to prevent browser from invalidating the reference after input reset
+  const cloned = files.map(f => new File([f], f.name, {type: f.type, lastModified: f.lastModified}));
+  incMediaFiles = [...incMediaFiles, ...cloned];
   renderMediaPreview();
-  input.value = ''; // reset so same file can be added again
+  // Small delay before resetting so File objects are fully cloned first
+  setTimeout(() => { try { input.value = ''; } catch(e) {} }, 100);
 }
 
 function renderMediaPreview() {
@@ -1652,16 +1655,11 @@ async function submitIncident() {
     if (incMediaFiles.length) {
       showToast('Uploading media...', 'success');
       mediaUrls = await uploadIncidentMedia(incidentId);
-      showToast('Upload done — ' + mediaUrls.length + ' file(s) uploaded', mediaUrls.length ? 'success' : 'error');
       // Persist URLs on the incident row so admin view can read them without re-listing Storage
       if (mediaUrls.length) {
         try {
           await sb('incidents','PATCH',{media_urls: JSON.stringify(mediaUrls)},`?id=eq.${incidentId}`);
-          showToast('Media URLs saved to report', 'success');
-        } catch(e) {
-          showToast('PATCH failed: ' + e.message, 'error');
-          console.error('Could not save media_urls to incident:', e);
-        }
+        } catch(e) { console.warn('Could not save media_urls to incident:', e); }
       }
     }
 
