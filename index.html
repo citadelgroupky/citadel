@@ -1521,6 +1521,7 @@ function removeMedia(index) {
 }
 
 async function uploadIncidentMedia(incidentId) {
+  alert('uploadIncidentMedia called — files: ' + incMediaFiles.length + ' — id: ' + incidentId);
   if (!incMediaFiles.length) return [];
   const urls = [];
   for (const file of incMediaFiles) {
