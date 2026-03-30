@@ -1652,11 +1652,16 @@ async function submitIncident() {
     if (incMediaFiles.length) {
       showToast('Uploading media...', 'success');
       mediaUrls = await uploadIncidentMedia(incidentId);
+      showToast('Upload done — ' + mediaUrls.length + ' file(s) uploaded', mediaUrls.length ? 'success' : 'error');
       // Persist URLs on the incident row so admin view can read them without re-listing Storage
       if (mediaUrls.length) {
         try {
           await sb('incidents','PATCH',{media_urls: JSON.stringify(mediaUrls)},`?id=eq.${incidentId}`);
-        } catch(e) { console.warn('Could not save media_urls to incident:', e); }
+          showToast('Media URLs saved to report', 'success');
+        } catch(e) {
+          showToast('PATCH failed: ' + e.message, 'error');
+          console.error('Could not save media_urls to incident:', e);
+        }
       }
     }
 
