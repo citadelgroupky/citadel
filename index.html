@@ -2762,16 +2762,13 @@ async function emailIncidentReport(incident, mediaUrls) {
   };
 
   try {
-    console.log('EmailJS DEBUG — sending to:', toAddress);
-    console.log('EmailJS DEBUG — params:', JSON.stringify(templateParams));
     const result = await emailjs.send('service_wucem8b', 'template_7esz06q', templateParams);
-    console.log('EmailJS DEBUG — success:', result.status, result.text);
-    alert('EMAIL DEBUG\nSUCCESS — Status: ' + result.status + '\nSent to: ' + toAddress);
+    console.log('Incident report emailed. Status:', result.status);
     showToast('Report emailed to management', 'success');
   } catch(e) {
     console.error('EmailJS DEBUG — FAILED:', e);
     const detail = (e && e.text) ? e.text : (e && e.message) ? e.message : JSON.stringify(e);
-    alert('EMAIL DEBUG\nFAILED\nError: ' + detail + '\nTo: ' + toAddress);
+    console.error('EmailJS send failed:', detail);
   }
 }
 
