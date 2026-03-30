@@ -1545,6 +1545,7 @@ async function uploadIncidentMedia(incidentId) {
       } else {
         const errText = await res.text();
         console.error('Upload failed:', res.status, errText);
+        showToast(`Media upload failed (${res.status}): ${errText}`, 'error');
       }
     } catch(e) {
       console.error('Upload exception:', e);
@@ -1585,11 +1586,9 @@ async function loadIncidentMedia(incidentId) {
 async function renderIncidentMedia(incidentId, containerId) {
   const el = document.getElementById(containerId);
   if (!el) return;
-  // Prefer URLs already stored on the incident object (fast, no Storage list call needed)
+  // Read URLs/base64 stored on the incident object
   const incident = store.incidents.find(i => i.id === incidentId);
-  let urls = (incident && incident.mediaUrls && incident.mediaUrls.length) ? incident.mediaUrls : [];
-  // Fall back to Storage list API if no stored URLs
-  if (!urls.length) urls = await loadIncidentMedia(incidentId);
+  const urls = (incident && incident.mediaUrls && incident.mediaUrls.length) ? incident.mediaUrls : [];
   if (!urls.length) { el.style.display='none'; return; }
   el.style.display = 'flex';
   el.innerHTML = `<div style="width:100%;font-family:'Barlow Condensed',sans-serif;font-size:9px;letter-spacing:2px;color:var(--silver);margin-bottom:6px;">MEDIA (${urls.length})</div>` +
@@ -1646,22 +1645,29 @@ async function submitIncident() {
     if (!saved || !saved[0]) throw new Error('No data returned from server');
     const incidentId = saved[0].id;
 
-    // Upload media files if any — re-read from inputs as fallback in case array was cleared
-    const uploadInput  = document.getElementById('inc-media-upload');
-    const cameraInput  = document.getElementById('inc-media-camera');
-    if (uploadInput && uploadInput.files.length)  incMediaFiles = [...incMediaFiles, ...Array.from(uploadInput.files).map(f => new File([f], f.name, {type:f.type}))];
-    if (cameraInput && cameraInput.files.length)  incMediaFiles = [...incMediaFiles, ...Array.from(cameraInput.files).map(f => new File([f], f.name, {type:f.type}))];
-    // Deduplicate by name
-    incMediaFiles = incMediaFiles.filter((f,i,a) => a.findIndex(x=>x.name===f.name&&x.size===f.size)===i);
+    // Encode media as base64 and store directly on the incident row — no Storage bucket needed
     let mediaUrls = [];
-    if (incMediaFiles.length) {
-      showToast('Uploading media...', 'success');
-      mediaUrls = await uploadIncidentMedia(incidentId);
-      // Persist URLs on the incident row so admin view can read them without re-listing Storage
-      if (mediaUrls.length) {
-        try {
-          await sb('incidents','PATCH',{media_urls: JSON.stringify(mediaUrls)},`?id=eq.${incidentId}`);
-        } catch(e) { console.warn('Could not save media_urls to incident:', e); }
+    const uploadInput = document.getElementById('inc-media-upload');
+    const cameraInput = document.getElementById('inc-media-camera');
+    let allFiles = [...incMediaFiles];
+    if (uploadInput && uploadInput.files.length) allFiles.push(...Array.from(uploadInput.files));
+    if (cameraInput && cameraInput.files.length) allFiles.push(...Array.from(cameraInput.files));
+    allFiles = allFiles.filter((f,i,a) => a.findIndex(x=>x.name===f.name&&x.size===f.size)===i);
+    if (allFiles.length) {
+      showToast('Saving media...', 'success');
+      const base64List = await Promise.all(allFiles.map(f => new Promise((res, rej) => {
+        const reader = new FileReader();
+        reader.onload = e => res(e.target.result);
+        reader.onerror = rej;
+        reader.readAsDataURL(f);
+      })));
+      try {
+        await sb('incidents','PATCH',{media_urls: JSON.stringify(base64List)},`?id=eq.${incidentId}`);
+        mediaUrls = base64List;
+        showToast('Media saved', 'success');
+      } catch(e) {
+        console.error('Media save failed:', e);
+        showToast('Media save failed: ' + e.message, 'error');
       }
     }
 
