@@ -1494,12 +1494,9 @@ let incMediaFiles = [];
 
 function handleMediaSelect(input) {
   const files = Array.from(input.files);
-  // Clone each file to prevent browser from invalidating the reference after input reset
-  const cloned = files.map(f => new File([f], f.name, {type: f.type, lastModified: f.lastModified}));
-  incMediaFiles = [...incMediaFiles, ...cloned];
+  incMediaFiles = [...incMediaFiles, ...files];
   renderMediaPreview();
-  // Small delay before resetting so File objects are fully cloned first
-  setTimeout(() => { try { input.value = ''; } catch(e) {} }, 100);
+  input.value = ''; // reset so same file can be added again
 }
 
 function renderMediaPreview() {
@@ -1545,10 +1542,11 @@ async function uploadIncidentMedia(incidentId) {
       if (res.ok) {
         const url = `${SUPABASE_URL}/storage/v1/object/public/incident-media/${path}`;
         urls.push(url);
+        alert('UPLOAD OK\nURL: ' + url);
       } else {
         const errText = await res.text();
         console.error('Upload failed:', res.status, errText);
-        showToast(`Media upload failed (${res.status}): ${errText}`, 'error');
+        alert('UPLOAD FAILED\nStatus: ' + res.status + '\n' + errText);
       }
     } catch(e) {
       console.error('Upload exception:', e);
