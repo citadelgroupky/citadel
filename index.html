@@ -2753,7 +2753,7 @@ async function emailIncidentReport(incident, mediaUrls) {
   };
 
   try {
-    const result = await emailjs.send('service_wucem8b', 'template_lgru2bj', templateParams);
+    const result = await emailjs.send('service_wucem8b', 'template_7esz06q', templateParams);
     console.log('Incident report emailed via EmailJS. Status:', result.status, result.text);
     showToast('Report emailed to management', 'success');
   } catch(e) {
