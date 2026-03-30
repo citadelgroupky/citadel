@@ -1521,7 +1521,6 @@ function removeMedia(index) {
 }
 
 async function uploadIncidentMedia(incidentId) {
-  alert('uploadIncidentMedia called — files: ' + incMediaFiles.length + ' — id: ' + incidentId);
   if (!incMediaFiles.length) return [];
   const urls = [];
   for (const file of incMediaFiles) {
@@ -1543,11 +1542,9 @@ async function uploadIncidentMedia(incidentId) {
       if (res.ok) {
         const url = `${SUPABASE_URL}/storage/v1/object/public/incident-media/${path}`;
         urls.push(url);
-        alert('UPLOAD OK\nURL: ' + url);
       } else {
         const errText = await res.text();
         console.error('Upload failed:', res.status, errText);
-        alert('UPLOAD FAILED\nStatus: ' + res.status + '\n' + errText);
       }
     } catch(e) {
       console.error('Upload exception:', e);
@@ -1649,7 +1646,13 @@ async function submitIncident() {
     if (!saved || !saved[0]) throw new Error('No data returned from server');
     const incidentId = saved[0].id;
 
-    // Upload media files if any
+    // Upload media files if any — re-read from inputs as fallback in case array was cleared
+    const uploadInput  = document.getElementById('inc-media-upload');
+    const cameraInput  = document.getElementById('inc-media-camera');
+    if (uploadInput && uploadInput.files.length)  incMediaFiles = [...incMediaFiles, ...Array.from(uploadInput.files).map(f => new File([f], f.name, {type:f.type}))];
+    if (cameraInput && cameraInput.files.length)  incMediaFiles = [...incMediaFiles, ...Array.from(cameraInput.files).map(f => new File([f], f.name, {type:f.type}))];
+    // Deduplicate by name
+    incMediaFiles = incMediaFiles.filter((f,i,a) => a.findIndex(x=>x.name===f.name&&x.size===f.size)===i);
     let mediaUrls = [];
     if (incMediaFiles.length) {
       showToast('Uploading media...', 'success');
