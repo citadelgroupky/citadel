@@ -1571,7 +1571,12 @@ async function loadIncidentMedia(incidentId) {
     if (!Array.isArray(files)) return [];
     return files
       .filter(f => f.name && !f.name.endsWith('/'))
-      .map(f => `${SUPABASE_URL}/storage/v1/object/public/incident-media/${incidentId}/${f.name}`);
+      .map(f => {
+        // Supabase Storage list() with a prefix may return names with or without the prefix folder.
+        // Normalise: strip leading `${incidentId}/` if present to avoid doubled path segments.
+        const name = f.name.startsWith(`${incidentId}/`) ? f.name.slice(`${incidentId}/`.length) : f.name;
+        return `${SUPABASE_URL}/storage/v1/object/public/incident-media/${incidentId}/${name}`;
+      });
   } catch(e) {
     console.error('loadIncidentMedia error:', e);
     return [];
@@ -2718,11 +2723,13 @@ async function emailIncidentReport(incident, mediaUrls) {
     : 'No media attached';
 
   // These variable names must match your EmailJS template placeholders exactly.
-  // In your template editor, use: {{to_email}}, {{subject}}, {{reporter_name}},
+  // In the EmailJS template editor, the "To Email" field must be set to {{to_email}}.
+  // Supported placeholders: {{to_email}}, {{to_name}}, {{subject}}, {{reporter_name}},
   // {{severity}}, {{location}}, {{incident_datetime}}, {{description}},
   // {{actions_taken}}, {{media_links}}, {{message}}
   const templateParams = {
     to_email:          toAddress,
+    to_name:           'Citadel Management',
     subject:           '[Incident Report] ' + incident.title + ' — ' + incident.severity + ' Severity',
     reporter_name:     reporterName,
     severity:          incident.severity || 'N/A',
@@ -2757,7 +2764,8 @@ async function emailIncidentReport(incident, mediaUrls) {
     console.log('Incident report emailed via EmailJS. Status:', result.status, result.text);
     showToast('Report emailed to management', 'success');
   } catch(e) {
-    console.warn('emailIncidentReport error:', e);
+    console.error('emailIncidentReport error:', e);
+    if (e && e.text) console.error('EmailJS error detail:', e.text);
     // Don't block the user — report was saved, email is best-effort
   }
 }
