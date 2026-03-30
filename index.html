@@ -898,7 +898,7 @@ async function loadAllData() {
     });
     store.shifts        = shifts.map(s=>({...s, userId:s.user_id, start:s.start_time, end:s.end_time}));
     store.timeEntries   = entries.map(e=>({...e, userId:e.user_id, clockIn:e.clock_in, clockOut:e.clock_out, location:e.site}));
-    store.incidents     = incidents.map(i=>({...i, userId:i.user_id, datetime:i.incident_datetime, datetimeEnd:i.incident_datetime_end, desc:i.description, actions:i.actions_taken, mediaUrls:[]}));
+    store.incidents     = incidents.map(i=>({...i, userId:i.user_id, datetime:i.incident_datetime, datetimeEnd:i.incident_datetime_end, desc:i.description, actions:i.actions_taken, mediaUrls: (() => { try { return i.media_urls ? JSON.parse(i.media_urls) : []; } catch(e) { return []; } })()}));
     store.timeOffRequests = timeoff.map(r=>({...r, userId:r.user_id, from:r.from_date, to:r.to_date}));
     // Auto-remove approved requests whose end date has passed
     const expiredApproved = store.timeOffRequests.filter(r=>r.status==='Approved' && r.to < today());
@@ -1586,7 +1586,11 @@ async function loadIncidentMedia(incidentId) {
 async function renderIncidentMedia(incidentId, containerId) {
   const el = document.getElementById(containerId);
   if (!el) return;
-  const urls = await loadIncidentMedia(incidentId);
+  // Prefer URLs already stored on the incident object (fast, no Storage list call needed)
+  const incident = store.incidents.find(i => i.id === incidentId);
+  let urls = (incident && incident.mediaUrls && incident.mediaUrls.length) ? incident.mediaUrls : [];
+  // Fall back to Storage list API if no stored URLs
+  if (!urls.length) urls = await loadIncidentMedia(incidentId);
   if (!urls.length) { el.style.display='none'; return; }
   el.style.display = 'flex';
   el.innerHTML = `<div style="width:100%;font-family:'Barlow Condensed',sans-serif;font-size:9px;letter-spacing:2px;color:var(--silver);margin-bottom:6px;">MEDIA (${urls.length})</div>` +
@@ -1648,6 +1652,12 @@ async function submitIncident() {
     if (incMediaFiles.length) {
       showToast('Uploading media...', 'success');
       mediaUrls = await uploadIncidentMedia(incidentId);
+      // Persist URLs on the incident row so admin view can read them without re-listing Storage
+      if (mediaUrls.length) {
+        try {
+          await sb('incidents','PATCH',{media_urls: JSON.stringify(mediaUrls)},`?id=eq.${incidentId}`);
+        } catch(e) { console.warn('Could not save media_urls to incident:', e); }
+      }
     }
 
     const mapped = {
