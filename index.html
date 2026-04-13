@@ -537,11 +537,14 @@ tbody td strong{color:var(--white);}
 
     <div class="page" id="page-aentries">
       <div class="page-header"><div class="page-title">Time Entries</div></div>
-      <div class="pay-filter" style="margin-bottom:16px;">
+      <div class="pay-filter" style="margin-bottom:16px;flex-wrap:wrap;gap:10px;">
         <label>EMPLOYEE</label>
         <select id="dash-entries-emp"><option value="all">All Employees</option></select>
-        <label>DATE</label>
-        <input type="date" id="dash-entries-date"/>
+        <label>FROM</label>
+        <input type="date" id="dash-entries-from"/>
+        <label>TO</label>
+        <input type="date" id="dash-entries-to"/>
+        <button type="button" class="btn btn-outline btn-sm" id="dash-entries-clear" style="padding:7px 14px;">CLEAR</button>
       </div>
       <div id="entries-periods"></div>
     </div>
@@ -604,7 +607,8 @@ tbody td strong{color:var(--white);}
             <label>Pay Period</label>
             <select id="setting-payperiod">
               <option value="weekly">Weekly</option>
-              <option value="biweekly" selected>Bi-Weekly</option>
+              <option value="weekly" selected>Weekly</option>
+              <option value="biweekly">Bi-Weekly</option>
               <option value="semimonthly">Semi-Monthly</option>
               <option value="monthly">Monthly</option>
             </select>
@@ -873,7 +877,7 @@ const store = {
   timeEntries: [],
   incidents: [],
   timeOffRequests: [],
-  settings: { email:'', payPeriod:'biweekly', bizName:'Citadel Group Security Solutions' },
+  settings: { email:'', payPeriod:'weekly', bizName:'Citadel Group Security Solutions' },
 };
 
 async function loadAllData() {
@@ -907,7 +911,7 @@ async function loadAllData() {
     }
     if (settings && settings[0]) {
       const s = settings[0];
-      store.settings = { email: s.incident_email||'', payPeriod: s.pay_period||'biweekly', bizName: s.biz_name||'Citadel Group Security Solutions', resendKey: s.resend_api_key||'', onesignalId: s.onesignal_app_id||'' };
+      store.settings = { email: s.incident_email||'', payPeriod: s.pay_period||'weekly', bizName: s.biz_name||'Citadel Group Security Solutions', resendKey: s.resend_api_key||'', onesignalId: s.onesignal_app_id||'' };
       store.adminPasswords = [s.admin_pass1||'admin123', s.admin_pass2||'admin456'];
       store._settingsId = s.id;
       // Apply saved API keys at boot
@@ -1134,7 +1138,18 @@ function showAdminPage(id) {
   if (id==='adashboard') renderAdminDash();
   if (id==='aschedule')  renderAdminSchedule();
   if (id==='apayroll')   renderPayroll();
-  if (id==='aentries')   { renderDashEntries(); document.getElementById('dash-entries-emp')?.addEventListener('change',renderDashEntries); document.getElementById('dash-entries-date')?.addEventListener('change',renderDashEntries); }
+  if (id==='aentries')   {
+    renderDashEntries();
+    document.getElementById('dash-entries-emp')?.addEventListener('change', renderDashEntries);
+    document.getElementById('dash-entries-from')?.addEventListener('change', renderDashEntries);
+    document.getElementById('dash-entries-to')?.addEventListener('change', renderDashEntries);
+    document.getElementById('dash-entries-clear')?.addEventListener('click', () => {
+      document.getElementById('dash-entries-from').value = '';
+      document.getElementById('dash-entries-to').value = '';
+      document.getElementById('dash-entries-emp').value = 'all';
+      renderDashEntries();
+    });
+  }
   if (id==='atimeoff')   renderAdminTimeOff();
   if (id==='aincidents') renderAdminIncidents();
   if (id==='apanel')     { renderAdminPanel(); const savedTab = localStorage.getItem('citadel_admin_tab'); if (savedTab) switchAdminTab(savedTab); }
@@ -1995,7 +2010,7 @@ function renderPayrollFilters() {
 
 // Generate pay period date ranges going back ~6 months
 function getPayPeriods() {
-  const pp = store.settings.payPeriod || 'biweekly';
+  const pp = store.settings.payPeriod || 'weekly';
   const periodDays = pp==='weekly'?7:pp==='biweekly'?14:pp==='monthly'?30:15;
   const now = new Date();
   const periods = [];
@@ -2400,7 +2415,8 @@ let editingEntryId = null;
 
 function renderDashEntries() {
   const empSel  = document.getElementById('dash-entries-emp');
-  const dateSel = document.getElementById('dash-entries-date');
+  const fromSel = document.getElementById('dash-entries-from');
+  const toSel   = document.getElementById('dash-entries-to');
   const cont    = document.getElementById('entries-periods');
   if (!empSel || !cont) return;
 
@@ -2409,62 +2425,104 @@ function renderDashEntries() {
   empSel.innerHTML = '<option value="all">All Employees</option>' +
     store.users.filter(u=>u.role==='employee').map(u=>`<option value="${u.id}"${u.id===parseInt(currentEmp)?' selected':''}>${u.name}</option>`).join('');
 
-  const empId  = empSel.value;
-  const dateVal = dateSel.value;
+  const empId   = empSel.value;
+  const fromVal = fromSel ? fromSel.value : '';
+  const toVal   = toSel   ? toSel.value   : '';
+  const hasRange = fromVal || toVal;
 
   let entries = store.timeEntries.slice();
   if (empId !== 'all') entries = entries.filter(e=>e.userId===parseInt(empId));
-  if (dateVal) entries = entries.filter(e=>e.date===dateVal);
+  if (fromVal) entries = entries.filter(e=>e.date >= fromVal);
+  if (toVal)   entries = entries.filter(e=>e.date <= toVal);
 
   if (!entries.length) { cont.innerHTML=`<div class="empty">No entries found.</div>`; return; }
 
-  const periods = getPayPeriods();
   let html = '';
-  let hasAny = false;
 
-  periods.forEach((period, idx) => {
-    const periodEntries = entries.filter(e => e.date >= period.from && e.date <= period.to);
-    if (!periodEntries.length && !period.current) return;
-    hasAny = true;
+  if (hasRange) {
+    // ── DATE RANGE MODE: group by individual day ──
+    const days = [...new Set(entries.map(e=>e.date))].sort((a,b)=>b.localeCompare(a));
+    days.forEach((day, idx) => {
+      const dayEntries = entries.filter(e=>e.date===day);
+      const totalHrs = dayEntries.reduce((s,e)=>s+parseFloat(e.hours||0),0);
+      const periodId = `entry-day-${idx}`;
+      const label = formatDate(day);
+      const summary = `${totalHrs.toFixed(2)} hrs · ${dayEntries.length} entr${dayEntries.length===1?'y':'ies'}`;
+      const rowsHtml = dayEntries.map(e => {
+        const u = store.users.find(u=>u.id===e.userId);
+        const hrs = parseFloat(e.hours||0);
+        return `<tr>
+          <td><strong>${u?.name||'?'}</strong></td>
+          <td>${e.clockIn||'—'}</td>
+          <td>${e.clockOut||'<span style="color:var(--success-light)">Active</span>'}</td>
+          <td>${hrs?hrs.toFixed(2):'—'}</td>
+          <td><button type="button" class="btn btn-outline btn-xs" onclick="openEditEntry(${e.id})">EDIT</button></td>
+        </tr>`;
+      }).join('');
+      html += `
+        <div class="pay-period-block">
+          <div class="pay-period-hdr" onclick="togglePeriod('${periodId}')">
+            <span class="pay-period-arrow open">&#9654;</span>
+            <span class="pay-period-label">${label}</span>
+            <span class="pay-period-summary">${summary}</span>
+          </div>
+          <div class="pay-period-body open" id="${periodId}">
+            <table>
+              <thead><tr><th>Employee</th><th>In</th><th>Out</th><th>Hrs</th><th></th></tr></thead>
+              <tbody>${rowsHtml}</tbody>
+            </table>
+          </div>
+        </div>`;
+    });
+    // Range total footer
+    const rangeHrs = entries.reduce((s,e)=>s+parseFloat(e.hours||0),0);
+    html += `<div style="text-align:right;font-family:'Barlow Condensed',sans-serif;font-size:13px;color:var(--chrome);padding:10px 4px;letter-spacing:1px;">RANGE TOTAL: <strong>${rangeHrs.toFixed(2)} hrs</strong></div>`;
+  } else {
+    // ── DEFAULT MODE: group by pay period ──
+    const periods = getPayPeriods();
+    let hasAny = false;
+    periods.forEach((period, idx) => {
+      const periodEntries = entries.filter(e => e.date >= period.from && e.date <= period.to);
+      if (!periodEntries.length && !period.current) return;
+      hasAny = true;
+      const totalHrs = periodEntries.reduce((s,e)=>s+parseFloat(e.hours||0),0);
+      const isOpen = period.current;
+      const periodId = `entry-period-${idx}`;
+      const label = `${formatDate(period.from)} – ${formatDate(period.to)}${period.current?' (Current)':''}`;
+      const summary = periodEntries.length ? `${totalHrs.toFixed(2)} hrs · ${periodEntries.length} entries` : 'No entries';
+      const rowsHtml = periodEntries.length
+        ? periodEntries.map(e => {
+            const u = store.users.find(u=>u.id===e.userId);
+            const hrs = parseFloat(e.hours||0);
+            return `<tr>
+              <td><strong>${u?.name||'?'}</strong></td>
+              <td>${formatDate(e.date)}</td>
+              <td>${e.clockIn||'—'}</td>
+              <td>${e.clockOut||'<span style="color:var(--success-light)">Active</span>'}</td>
+              <td>${hrs?hrs.toFixed(2):'—'}</td>
+              <td><button type="button" class="btn btn-outline btn-xs" onclick="openEditEntry(${e.id})">EDIT</button></td>
+            </tr>`;
+          }).join('')
+        : `<tr><td colspan="6" class="empty">No entries this period</td></tr>`;
+      html += `
+        <div class="pay-period-block">
+          <div class="pay-period-hdr" onclick="togglePeriod('${periodId}')">
+            <span class="pay-period-arrow${isOpen?' open':''}">&#9654;</span>
+            <span class="pay-period-label">${label}</span>
+            <span class="pay-period-summary">${summary}</span>
+          </div>
+          <div class="pay-period-body${isOpen?' open':''}" id="${periodId}">
+            <table>
+              <thead><tr><th>Employee</th><th>Date</th><th>In</th><th>Out</th><th>Hrs</th><th></th></tr></thead>
+              <tbody>${rowsHtml}</tbody>
+            </table>
+          </div>
+        </div>`;
+    });
+    if (!hasAny) html = `<div class="empty">No entries found.</div>`;
+  }
 
-    const totalHrs = periodEntries.reduce((s,e)=>s+parseFloat(e.hours||0),0);
-    const isOpen = period.current;
-    const periodId = `entry-period-${idx}`;
-    const label = `${formatDate(period.from)} – ${formatDate(period.to)}${period.current?' (Current)':''}`;
-    const summary = periodEntries.length ? `${totalHrs.toFixed(2)} hrs · ${periodEntries.length} entries` : 'No entries';
-
-    const rowsHtml = periodEntries.length
-      ? periodEntries.map(e => {
-          const u = store.users.find(u=>u.id===e.userId);
-          const hrs = parseFloat(e.hours||0);
-          return `<tr>
-            <td><strong>${u?.name||'?'}</strong></td>
-            <td>${formatDate(e.date)}</td>
-            <td>${e.clockIn||'—'}</td>
-            <td>${e.clockOut||'<span style="color:var(--success-light)">Active</span>'}</td>
-            <td>${hrs?hrs.toFixed(2):'—'}</td>
-            <td><button type="button" class="btn btn-outline btn-xs" onclick="openEditEntry(${e.id})">EDIT</button></td>
-          </tr>`;
-        }).join('')
-      : `<tr><td colspan="6" class="empty">No entries this period</td></tr>`;
-
-    html += `
-      <div class="pay-period-block">
-        <div class="pay-period-hdr" onclick="togglePeriod('${periodId}')">
-          <span class="pay-period-arrow${isOpen?' open':''}">&#9654;</span>
-          <span class="pay-period-label">${label}</span>
-          <span class="pay-period-summary">${summary}</span>
-        </div>
-        <div class="pay-period-body${isOpen?' open':''}" id="${periodId}">
-          <table>
-            <thead><tr><th>Employee</th><th>Date</th><th>In</th><th>Out</th><th>Hrs</th><th></th></tr></thead>
-            <tbody>${rowsHtml}</tbody>
-          </table>
-        </div>
-      </div>`;
-  });
-
-  cont.innerHTML = hasAny ? html : `<div class="empty">No entries found.</div>`;
+  cont.innerHTML = html;
 }
 
 function openEditEntry(id) {
