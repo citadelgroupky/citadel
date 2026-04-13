@@ -2011,29 +2011,46 @@ function renderPayrollFilters() {
 // Generate pay period date ranges going back ~6 months
 function getPayPeriods() {
   const pp = store.settings.payPeriod || 'weekly';
-  const periodDays = pp==='weekly'?7:pp==='biweekly'?14:pp==='monthly'?30:15;
   const now = new Date();
   const periods = [];
 
-  // Find the start of the current period
-  // Anchor to a fixed reference date (Jan 6 2025 = a known Monday/biweekly start)
-  const anchor = new Date('2025-01-06');
-  const msSinceAnchor = now - anchor;
-  const daysSinceAnchor = Math.floor(msSinceAnchor / 86400000);
-  const currentPeriodIndex = Math.floor(daysSinceAnchor / periodDays);
+  if (pp === 'weekly') {
+    // Periods run Friday → Thursday
+    // Anchor: Friday 2025-01-03
+    const anchor = new Date('2025-01-03');
+    const daysSinceAnchor = Math.floor((now - anchor) / 86400000);
+    const currentPeriodIndex = Math.floor(daysSinceAnchor / 7);
 
-  // Generate last 12 periods
-  for (let i = 0; i < 12; i++) {
-    const idx = currentPeriodIndex - i;
-    const start = new Date(anchor);
-    start.setDate(anchor.getDate() + idx * periodDays);
-    const end = new Date(start);
-    end.setDate(start.getDate() + periodDays - 1);
-    periods.push({
-      from: start.toISOString().split('T')[0],
-      to:   end.toISOString().split('T')[0],
-      current: i === 0
-    });
+    for (let i = 0; i < 12; i++) {
+      const idx = currentPeriodIndex - i;
+      const start = new Date(anchor);
+      start.setDate(anchor.getDate() + idx * 7);
+      const end = new Date(start);
+      end.setDate(start.getDate() + 6); // Thursday
+      periods.push({
+        from: start.toISOString().split('T')[0],
+        to:   end.toISOString().split('T')[0],
+        current: i === 0
+      });
+    }
+  } else {
+    const periodDays = pp==='biweekly'?14:pp==='monthly'?30:7;
+    const anchor = new Date('2025-01-03');
+    const daysSinceAnchor = Math.floor((now - anchor) / 86400000);
+    const currentPeriodIndex = Math.floor(daysSinceAnchor / periodDays);
+
+    for (let i = 0; i < 12; i++) {
+      const idx = currentPeriodIndex - i;
+      const start = new Date(anchor);
+      start.setDate(anchor.getDate() + idx * periodDays);
+      const end = new Date(start);
+      end.setDate(start.getDate() + periodDays - 1);
+      periods.push({
+        from: start.toISOString().split('T')[0],
+        to:   end.toISOString().split('T')[0],
+        current: i === 0
+      });
+    }
   }
   return periods;
 }
