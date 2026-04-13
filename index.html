@@ -537,16 +537,13 @@ tbody td strong{color:var(--white);}
 
     <div class="page" id="page-aentries">
       <div class="page-header"><div class="page-title">Time Entries</div></div>
-      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
-        <select id="dash-entries-emp" style="background:rgba(255,255,255,0.05);border:1px solid var(--border-bright);border-radius:4px;padding:8px 10px;color:var(--white);font-family:'Barlow Condensed',sans-serif;font-size:13px;outline:none;"></select>
-        <input type="date" id="dash-entries-date" style="background:rgba(255,255,255,0.05);border:1px solid var(--border-bright);border-radius:4px;padding:8px 10px;color:var(--white);font-family:'Barlow Condensed',sans-serif;font-size:13px;outline:none;"/>
+      <div class="pay-filter" style="margin-bottom:16px;">
+        <label>EMPLOYEE</label>
+        <select id="dash-entries-emp"><option value="all">All Employees</option></select>
+        <label>DATE</label>
+        <input type="date" id="dash-entries-date"/>
       </div>
-      <div class="card">
-        <table>
-          <thead><tr><th>Employee</th><th>Date</th><th>In</th><th>Out</th><th>Hrs</th><th></th></tr></thead>
-          <tbody id="dash-entries-tbody"></tbody>
-        </table>
-      </div>
+      <div id="entries-periods"></div>
     </div>
 
     <div class="page" id="page-aschedule">
@@ -2404,36 +2401,70 @@ let editingEntryId = null;
 function renderDashEntries() {
   const empSel  = document.getElementById('dash-entries-emp');
   const dateSel = document.getElementById('dash-entries-date');
-  if (!empSel) return;
+  const cont    = document.getElementById('entries-periods');
+  if (!empSel || !cont) return;
 
-  // Populate employee filter if empty
-  if (empSel.options.length === 0) {
-    empSel.innerHTML = '<option value="all">All Employees</option>' +
-      store.users.filter(u=>u.role==='employee').map(u=>`<option value="${u.id}">${u.name}</option>`).join('');
-  }
+  // Populate employee filter
+  const currentEmp = empSel.value;
+  empSel.innerHTML = '<option value="all">All Employees</option>' +
+    store.users.filter(u=>u.role==='employee').map(u=>`<option value="${u.id}"${u.id===parseInt(currentEmp)?' selected':''}>${u.name}</option>`).join('');
 
-  const empId    = empSel.value;
-  const dateVal  = dateSel.value;
+  const empId  = empSel.value;
+  const dateVal = dateSel.value;
+
   let entries = store.timeEntries.slice();
   if (empId !== 'all') entries = entries.filter(e=>e.userId===parseInt(empId));
   if (dateVal) entries = entries.filter(e=>e.date===dateVal);
-  entries = entries.slice(0,30); // cap at 30 rows
 
-  const tbody = document.getElementById('dash-entries-tbody');
-  if (!tbody) return;
-  if (!entries.length) { tbody.innerHTML=`<tr><td colspan="6" class="empty">NO ENTRIES</td></tr>`; return; }
-  tbody.innerHTML = entries.map(e=>{
-    const u = store.users.find(u=>u.id===e.userId);
-    const hrs = parseFloat(e.hours||0);
-    return `<tr>
-      <td><strong>${u?.name||'?'}</strong></td>
-      <td>${formatDate(e.date)}</td>
-      <td>${e.clockIn||'—'}</td>
-      <td>${e.clockOut||'<span style="color:var(--success-light)">Active</span>'}</td>
-      <td>${hrs?hrs.toFixed(2):'—'}</td>
-      <td><button type="button" class="btn btn-outline btn-xs" onclick="openEditEntry(${e.id})">EDIT</button></td>
-    </tr>`;
-  }).join('');
+  if (!entries.length) { cont.innerHTML=`<div class="empty">No entries found.</div>`; return; }
+
+  const periods = getPayPeriods();
+  let html = '';
+  let hasAny = false;
+
+  periods.forEach((period, idx) => {
+    const periodEntries = entries.filter(e => e.date >= period.from && e.date <= period.to);
+    if (!periodEntries.length && !period.current) return;
+    hasAny = true;
+
+    const totalHrs = periodEntries.reduce((s,e)=>s+parseFloat(e.hours||0),0);
+    const isOpen = period.current;
+    const periodId = `entry-period-${idx}`;
+    const label = `${formatDate(period.from)} – ${formatDate(period.to)}${period.current?' (Current)':''}`;
+    const summary = periodEntries.length ? `${totalHrs.toFixed(2)} hrs · ${periodEntries.length} entries` : 'No entries';
+
+    const rowsHtml = periodEntries.length
+      ? periodEntries.map(e => {
+          const u = store.users.find(u=>u.id===e.userId);
+          const hrs = parseFloat(e.hours||0);
+          return `<tr>
+            <td><strong>${u?.name||'?'}</strong></td>
+            <td>${formatDate(e.date)}</td>
+            <td>${e.clockIn||'—'}</td>
+            <td>${e.clockOut||'<span style="color:var(--success-light)">Active</span>'}</td>
+            <td>${hrs?hrs.toFixed(2):'—'}</td>
+            <td><button type="button" class="btn btn-outline btn-xs" onclick="openEditEntry(${e.id})">EDIT</button></td>
+          </tr>`;
+        }).join('')
+      : `<tr><td colspan="6" class="empty">No entries this period</td></tr>`;
+
+    html += `
+      <div class="pay-period-block">
+        <div class="pay-period-hdr" onclick="togglePeriod('${periodId}')">
+          <span class="pay-period-arrow${isOpen?' open':''}">&#9654;</span>
+          <span class="pay-period-label">${label}</span>
+          <span class="pay-period-summary">${summary}</span>
+        </div>
+        <div class="pay-period-body${isOpen?' open':''}" id="${periodId}">
+          <table>
+            <thead><tr><th>Employee</th><th>Date</th><th>In</th><th>Out</th><th>Hrs</th><th></th></tr></thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+        </div>
+      </div>`;
+  });
+
+  cont.innerHTML = hasAny ? html : `<div class="empty">No entries found.</div>`;
 }
 
 function openEditEntry(id) {
