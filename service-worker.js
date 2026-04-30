@@ -1,4 +1,4 @@
-const CACHE_NAME = 'citadel-v2';
+const CACHE_NAME = 'citadel-v3';
 const ASSETS = [
   '/citadel/',
   '/citadel/index.html',
