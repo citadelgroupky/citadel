@@ -1145,7 +1145,8 @@ function showAdminPage(id) {
 // OVERVIEW
 // ══════════════════════════════════════
 function renderOverview() {
-  const myEntries = store.timeEntries.filter(e=>e.userId===currentUser.id);
+  const pp        = getPayPeriods()[0];
+  const myEntries = store.timeEntries.filter(e=>e.userId===currentUser.id && e.date>=pp.from && e.date<=pp.to);
   const myHrs     = myEntries.reduce((s,e)=>s+parseFloat(e.hours||0),0);
   const myShifts  = store.shifts.filter(s=>s.userId===currentUser.id);
   const next      = myShifts.filter(s=>s.date>=today()).sort((a,b)=>a.date.localeCompare(b.date))[0];
