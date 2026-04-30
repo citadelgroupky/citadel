@@ -885,7 +885,7 @@ async function loadAllData() {
     });
     store.shifts        = shifts.map(s=>({...s, userId:s.user_id, start:s.start_time, end:s.end_time}));
     store.timeEntries   = entries.map(e=>({...e, userId:e.user_id, clockIn:e.clock_in, clockOut:e.clock_out, location:e.site}));
-    store.incidents     = incidents.map(i=>({...i, userId:i.user_id, datetime:i.incident_datetime, datetimeEnd:i.incident_datetime_end, desc:i.description, actions:i.actions_taken}));
+    store.incidents     = incidents.map(i=>({...i, userId:i.user_id, datetime:i.incident_datetime, datetimeEnd:i.incident_datetime_end, desc:i.description, actions:i.actions_taken, mediaUrls: (() => { try { return i.media_urls ? JSON.parse(i.media_urls) : []; } catch(e) { return []; } })()}));
     store.timeOffRequests = timeoff.map(r=>({...r, userId:r.user_id, from:r.from_date, to:r.to_date}));
     // Auto-remove approved requests whose end date has passed
     const expiredApproved = store.timeOffRequests.filter(r=>r.status==='Approved' && r.to < today());
@@ -1126,19 +1126,15 @@ function showAdminPage(id) {
   if (id==='apayroll')   renderPayroll();
   if (id==='aentries')   {
     renderDashEntries();
-    const empSel   = document.getElementById('dash-entries-emp');
-    const fromSel  = document.getElementById('dash-entries-from');
-    const toSel    = document.getElementById('dash-entries-to');
-    const clearBtn = document.getElementById('dash-entries-clear');
-    if (empSel)   empSel.onchange   = renderDashEntries;
-    if (fromSel)  fromSel.onchange  = renderDashEntries;
-    if (toSel)    toSel.onchange    = renderDashEntries;
-    if (clearBtn) clearBtn.onclick  = () => {
+    document.getElementById('dash-entries-emp')?.addEventListener('change', renderDashEntries);
+    document.getElementById('dash-entries-from')?.addEventListener('change', renderDashEntries);
+    document.getElementById('dash-entries-to')?.addEventListener('change', renderDashEntries);
+    document.getElementById('dash-entries-clear')?.addEventListener('click', () => {
       document.getElementById('dash-entries-from').value = '';
       document.getElementById('dash-entries-to').value = '';
       document.getElementById('dash-entries-emp').value = 'all';
       renderDashEntries();
-    };
+    });
   }
   if (id==='atimeoff')   renderAdminTimeOff();
   if (id==='aincidents') renderAdminIncidents();
@@ -1150,8 +1146,7 @@ function showAdminPage(id) {
 // ══════════════════════════════════════
 function renderOverview() {
   const myEntries = store.timeEntries.filter(e=>e.userId===currentUser.id);
-  const pp        = getPayPeriods()[0];
-  const myHrs     = myEntries.filter(e=>e.date>=pp.from && e.date<=pp.to).reduce((s,e)=>s+parseFloat(e.hours||0),0);
+  const myHrs     = myEntries.reduce((s,e)=>s+parseFloat(e.hours||0),0);
   const myShifts  = store.shifts.filter(s=>s.userId===currentUser.id);
   const next      = myShifts.filter(s=>s.date>=today()).sort((a,b)=>a.date.localeCompare(b.date))[0];
   const isClockedIn = !!clockedInAt;
@@ -1275,7 +1270,6 @@ async function doClock(action) {
         user_id:  currentUser.id,
         date:     now.toISOString().split('T')[0],
         clock_in: now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true}),
-        site:     loc,
       });
       const saved = result && result[0] ? result[0] : null;
       if (saved && saved.id) localStorage.setItem(clockKey()+'_rowid', saved.id.toString());
@@ -1289,6 +1283,10 @@ async function doClock(action) {
     startClockTimer();
     showToast('Clocked in at '+loc, 'success');
     if (currentEmpPage === 'overview') renderOverview();
+    // Persistent clock-in notification
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({ type: 'CLOCK_IN', location: loc });
+    }
   } else {
     if (!clockedInAt) return;
     const hrs = Math.round((now.getTime() - clockedInAt.getTime()) / 1000 / 36) / 100;
@@ -1309,7 +1307,7 @@ async function doClock(action) {
         });
       }
       const fresh = await sb('time_entries','GET',null,`?user_id=eq.${currentUser.id}&order=date.desc`);
-      store.timeEntries = fresh.map(e=>({...e, userId:e.user_id, clockIn:e.clock_in, clockOut:e.clock_out, location:e.site}));
+      store.timeEntries = fresh.map(e=>({...e, userId:e.user_id, clockIn:e.clock_in, clockOut:e.clock_out}));
     } catch(e) { showToast('Error saving entry: '+e.message,'error'); return; }
     clockedInAt = null;
     localStorage.removeItem(clockKey());
@@ -1320,6 +1318,10 @@ async function doClock(action) {
     renderClockLog();
     showToast(`Clocked out — ${hrs} hrs`, 'success');
     if (currentEmpPage === 'overview') renderOverview();
+    // Dismiss persistent clock-in notification
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({ type: 'CLOCK_OUT' });
+    }
   }
 }
 
@@ -1691,6 +1693,8 @@ function renderAdminDash() {
     if (el) el.innerHTML='<div class="empty" style="padding:8px 0;">Could not load.</div>';
   });
 
+  // Render editable time entries table
+  renderDashEntries();
 }
 
 // ══════════════════════════════════════
@@ -1975,6 +1979,15 @@ function togglePeriod(id) {
   const isOpen = body.classList.toggle('open');
   arrow?.classList.toggle('open', isOpen);
 }
+
+function toggleTimeEntries() {
+  const body  = document.getElementById('time-entries-body');
+  const arrow = document.getElementById('time-entries-arrow');
+  if (!body) return;
+  const isOpen = body.classList.toggle('open');
+  arrow?.classList.toggle('open', isOpen);
+}
+
 
 function exportPayroll() {
   const empId = document.getElementById('payroll-emp-filter').value;
@@ -2627,8 +2640,7 @@ async function initOneSignal() {
 }
 
 async function oneSignalLogin(user) {
-  const activeOSId = window.ONESIGNAL_APP_ID || ONESIGNAL_APP_ID;
-  if (!activeOSId || activeOSId === 'YOUR_ONESIGNAL_APP_ID') return;
+  if (!ONESIGNAL_APP_ID || ONESIGNAL_APP_ID === 'YOUR_ONESIGNAL_APP_ID') return;
   OneSignalDeferred.push(async function(OneSignal) {
     try {
       await OneSignal.login(String(user.id));
@@ -2643,8 +2655,7 @@ async function oneSignalLogin(user) {
 // calls the OneSignal REST API with the server API key (never expose
 // the OneSignal REST API key in client-side code).
 async function queuePushNotification(title, body, data) {
-  const activeOSId = window.ONESIGNAL_APP_ID || ONESIGNAL_APP_ID;
-  if (!activeOSId || activeOSId === 'YOUR_ONESIGNAL_APP_ID') return;
+  if (!ONESIGNAL_APP_ID || ONESIGNAL_APP_ID === 'YOUR_ONESIGNAL_APP_ID') return;
   try {
     await sb('notifications', 'POST', {
       title,
@@ -2657,8 +2668,7 @@ async function queuePushNotification(title, body, data) {
 }
 
 async function scheduleShiftReminder(shift, employeeName) {
-  const activeOSId = window.ONESIGNAL_APP_ID || ONESIGNAL_APP_ID;
-  if (!activeOSId || activeOSId === 'YOUR_ONESIGNAL_APP_ID') return;
+  if (!ONESIGNAL_APP_ID || ONESIGNAL_APP_ID === 'YOUR_ONESIGNAL_APP_ID') return;
   try {
     const reminderTime = new Date(shift.date + 'T09:00:00');
     if (reminderTime < new Date()) return;
