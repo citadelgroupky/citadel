@@ -1,4 +1,4 @@
-const CACHE_NAME = 'citadel-v1';
+const CACHE_NAME = 'citadel-v2';
 const ASSETS = [
   '/citadel/',
   '/citadel/index.html',
@@ -24,8 +24,6 @@ self.addEventListener('activate', e => {
 // Fetch — network first, fall back to cache
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
-
-  // Always go network-only for Supabase API calls (live data)
   if (url.hostname.includes('supabase.co')) {
     e.respondWith(
       fetch(e.request).catch(() => new Response(JSON.stringify([]), {
@@ -34,8 +32,6 @@ self.addEventListener('fetch', e => {
     );
     return;
   }
-
-  // For Google Fonts — cache first
   if (url.hostname.includes('fonts.')) {
     e.respondWith(
       caches.match(e.request).then(cached => cached || fetch(e.request).then(res => {
@@ -46,13 +42,42 @@ self.addEventListener('fetch', e => {
     );
     return;
   }
-
-  // For everything else — network first, fall back to cache
   e.respondWith(
     fetch(e.request).then(res => {
       const clone = res.clone();
       caches.open(CACHE_NAME).then(cache => cache.put(e.request, clone));
       return res;
     }).catch(() => caches.match(e.request))
+  );
+});
+
+// ── PERSISTENT CLOCK-IN NOTIFICATION ──
+const CLOCK_IN_TAG = 'citadel-clocked-in';
+
+self.addEventListener('message', e => {
+  if (e.data?.type === 'CLOCK_IN') {
+    self.registration.showNotification('Citadel — Clocked In', {
+      body: `You are clocked in at ${e.data.location}. Tap to open the app.`,
+      icon: '/citadel/icon-192.png',
+      tag: CLOCK_IN_TAG,
+      renotify: false,
+      silent: true,
+      requireInteraction: true  // stays until dismissed on Android
+    });
+  }
+  if (e.data?.type === 'CLOCK_OUT') {
+    self.registration.getNotifications({ tag: CLOCK_IN_TAG })
+      .then(notifications => notifications.forEach(n => n.close()));
+  }
+});
+
+// Tap notification — open app
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  e.waitUntil(
+    clients.matchAll({ type: 'window' }).then(list => {
+      if (list.length) return list[0].focus();
+      return clients.openWindow('/citadel/');
+    })
   );
 });
