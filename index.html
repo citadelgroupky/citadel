@@ -820,8 +820,8 @@ tbody td strong{color:var(--white);}
 // ══════════════════════════════════════
 // SUPABASE CONFIG
 // ══════════════════════════════════════
-const SUPABASE_URL = 'https://agznogsjlufjvfecjyld.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFnem5vZ3NqbHVmanZmZWNqeWxkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQwNjU4ODksImV4cCI6MjA4OTY0MTg4OX0.o9ja85HavnD6GylxX110AF8ESF5GW1Vl0me4AVnnTwM';
+const SUPABASE_URL = 'https://hjkxdsyplbnuicmjvfjl.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhqa3hkc3lwbGJudWljbWp2ZmpsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyMzE4ODMsImV4cCI6MjA4OTgwNzg4M30.liaY2Qq-w3IPvRITiDOKqlYoZ4spg2XRv7lUdsze1fM';
 
 async function sb(table, method='GET', body=null, query='') {
   const url = `${SUPABASE_URL}/rest/v1/${table}${query}`;
@@ -879,10 +879,13 @@ async function loadAllData() {
       sb('settings', 'GET', null, '?select=*&limit=1'),
     ]);
     store.users         = users.map(u=>({...u, id:u.id}));
-    store.locations     = locations.map(l=>({...l, color: l.color || '#4a9eff'}));
+    store.locations     = locations.map(l=>{
+      const colors = JSON.parse(localStorage.getItem('citadel_loc_colors')||'{}');
+      return {...l, color: l.color || colors[l.id] || '#6b6b7a'};
+    });
     store.shifts        = shifts.map(s=>({...s, userId:s.user_id, start:s.start_time, end:s.end_time}));
     store.timeEntries   = entries.map(e=>({...e, userId:e.user_id, clockIn:e.clock_in, clockOut:e.clock_out, location:e.site}));
-    store.incidents     = incidents.map(i=>({...i, userId:i.user_id, datetime:i.incident_datetime, datetimeEnd:i.incident_datetime_end, desc:i.description, actions:i.actions_taken}));
+    store.incidents     = incidents.map(i=>({...i, userId:i.user_id, datetime:i.incident_datetime, datetimeEnd:i.incident_datetime_end, desc:i.description, actions:i.actions_taken, mediaUrls: (() => { try { return i.media_urls ? JSON.parse(i.media_urls) : []; } catch(e) { return []; } })()}));
     store.timeOffRequests = timeoff.map(r=>({...r, userId:r.user_id, from:r.from_date, to:r.to_date}));
     // Auto-remove approved requests whose end date has passed
     const expiredApproved = store.timeOffRequests.filter(r=>r.status==='Approved' && r.to < today());
@@ -934,8 +937,7 @@ let currentEmpPage  = 'overview';
 // ══════════════════════════════════════
 // UTILS
 // ══════════════════════════════════════
-const localDateStr = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-const today = () => localDateStr(new Date());
+const today = () => new Date().toISOString().split('T')[0];
 
 function formatDate(d) {
   if (!d) return '—';
@@ -1124,19 +1126,15 @@ function showAdminPage(id) {
   if (id==='apayroll')   renderPayroll();
   if (id==='aentries')   {
     renderDashEntries();
-    const empSel   = document.getElementById('dash-entries-emp');
-    const fromSel  = document.getElementById('dash-entries-from');
-    const toSel    = document.getElementById('dash-entries-to');
-    const clearBtn = document.getElementById('dash-entries-clear');
-    if (empSel)   empSel.onchange   = renderDashEntries;
-    if (fromSel)  fromSel.onchange  = renderDashEntries;
-    if (toSel)    toSel.onchange    = renderDashEntries;
-    if (clearBtn) clearBtn.onclick  = () => {
+    document.getElementById('dash-entries-emp')?.addEventListener('change', renderDashEntries);
+    document.getElementById('dash-entries-from')?.addEventListener('change', renderDashEntries);
+    document.getElementById('dash-entries-to')?.addEventListener('change', renderDashEntries);
+    document.getElementById('dash-entries-clear')?.addEventListener('click', () => {
       document.getElementById('dash-entries-from').value = '';
       document.getElementById('dash-entries-to').value = '';
       document.getElementById('dash-entries-emp').value = 'all';
       renderDashEntries();
-    };
+    });
   }
   if (id==='atimeoff')   renderAdminTimeOff();
   if (id==='aincidents') renderAdminIncidents();
@@ -1147,9 +1145,9 @@ function showAdminPage(id) {
 // OVERVIEW
 // ══════════════════════════════════════
 function renderOverview() {
-  const myEntries = store.timeEntries.filter(e=>e.userId===currentUser.id);
   const pp        = getPayPeriods()[0];
-  const myHrs     = myEntries.filter(e=>e.date>=pp.from && e.date<=pp.to).reduce((s,e)=>s+parseFloat(e.hours||0),0);
+  const myEntries = store.timeEntries.filter(e=>e.userId===currentUser.id && e.date>=pp.from && e.date<=pp.to);
+  const myHrs     = myEntries.reduce((s,e)=>s+parseFloat(e.hours||0),0);
   const myShifts  = store.shifts.filter(s=>s.userId===currentUser.id);
   const next      = myShifts.filter(s=>s.date>=today()).sort((a,b)=>a.date.localeCompare(b.date))[0];
   const isClockedIn = !!clockedInAt;
@@ -1287,6 +1285,10 @@ async function doClock(action) {
     startClockTimer();
     showToast('Clocked in at '+loc, 'success');
     if (currentEmpPage === 'overview') renderOverview();
+    // Persistent clock-in notification
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({ type: 'CLOCK_IN', location: loc });
+    }
   } else {
     if (!clockedInAt) return;
     const hrs = Math.round((now.getTime() - clockedInAt.getTime()) / 1000 / 36) / 100;
@@ -1297,10 +1299,7 @@ async function doClock(action) {
     };
     try {
       if (rowId) {
-        const patched = await sb('time_entries','PATCH',updates,`?id=eq.${rowId}`);
-        if (!patched || !patched.length) {
-          await sb('time_entries','POST',{ user_id:currentUser.id, date:localDateStr(clockedInAt), clock_in:clockedInAt.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true}), ...updates });
-        }
+        await sb('time_entries','PATCH',updates,`?id=eq.${rowId}`);
       } else {
         await sb('time_entries','POST',{
           user_id:   currentUser.id,
@@ -1310,7 +1309,7 @@ async function doClock(action) {
         });
       }
       const fresh = await sb('time_entries','GET',null,`?user_id=eq.${currentUser.id}&order=date.desc`);
-      store.timeEntries = fresh.map(e=>({...e, userId:e.user_id, clockIn:e.clock_in, clockOut:e.clock_out, location:e.site}));
+      store.timeEntries = fresh.map(e=>({...e, userId:e.user_id, clockIn:e.clock_in, clockOut:e.clock_out}));
     } catch(e) { showToast('Error saving entry: '+e.message,'error'); return; }
     clockedInAt = null;
     localStorage.removeItem(clockKey());
@@ -1321,6 +1320,10 @@ async function doClock(action) {
     renderClockLog();
     showToast(`Clocked out — ${hrs} hrs`, 'success');
     if (currentEmpPage === 'overview') renderOverview();
+    // Dismiss persistent clock-in notification
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({ type: 'CLOCK_OUT' });
+    }
   }
 }
 
@@ -1329,7 +1332,7 @@ function renderClockLog() {
   const tbody = document.getElementById('clock-log');
   if (!tbody) return;
   tbody.innerHTML = entries.length
-    ? entries.slice(0,20).map(e=>`<tr><td><strong>${formatDate(e.date)}</strong></td><td>${e.clockIn}</td><td>${e.clockOut||'<span style="color:var(--success-light)">Active</span>'}</td><td>${e.location||'—'}</td><td><strong>${e.clockOut ? parseFloat(e.hours||0).toFixed(2) : '—'}</strong></td></tr>`).join('')
+    ? entries.slice(0,20).map(e=>`<tr><td><strong>${formatDate(e.date)}</strong></td><td>${e.clockIn}</td><td>${e.clockOut||'<span style="color:var(--success-light)">Active</span>'}</td><td>${e.location||'—'}</td><td><strong>${parseFloat(e.hours).toFixed(2)}</strong></td></tr>`).join('')
     : `<tr><td colspan="5" class="empty">NO ENTRIES YET</td></tr>`;
   const tot = entries.reduce((s,e)=>s+parseFloat(e.hours||0),0);
   const ph = document.getElementById('period-hours');
@@ -1692,6 +1695,8 @@ function renderAdminDash() {
     if (el) el.innerHTML='<div class="empty" style="padding:8px 0;">Could not load.</div>';
   });
 
+  // Render editable time entries table
+  renderDashEntries();
 }
 
 // ══════════════════════════════════════
@@ -1861,26 +1866,28 @@ function getPayPeriods() {
   const now = new Date();
   const periods = [];
 
-  if (pp === 'monthly') {
-    // Use real calendar months — anchor is January 2025
-    const anchorYear = 2025, anchorMonth = 0;
-    const monthsSince = (now.getFullYear() - anchorYear) * 12 + (now.getMonth() - anchorMonth);
+  if (pp === 'weekly') {
+    // Periods run Friday → Thursday
+    // Anchor: Friday 2025-01-03
+    const anchor = new Date('2025-01-03');
+    const daysSinceAnchor = Math.floor((now - anchor) / 86400000);
+    const currentPeriodIndex = Math.floor(daysSinceAnchor / 7);
+
     for (let i = 0; i < 12; i++) {
-      const offset = monthsSince - i;
-      const y = anchorYear + Math.floor(offset / 12);
-      const m = ((offset % 12) + 12) % 12;
-      const start = new Date(y, m, 1);
-      const end   = new Date(y, m + 1, 0); // last day of month
+      const idx = currentPeriodIndex - i;
+      const start = new Date(anchor);
+      start.setDate(anchor.getDate() + idx * 7);
+      const end = new Date(start);
+      end.setDate(start.getDate() + 6); // Thursday
       periods.push({
-        from: localDateStr(start),
-        to:   localDateStr(end),
+        from: start.toISOString().split('T')[0],
+        to:   end.toISOString().split('T')[0],
         current: i === 0
       });
     }
   } else {
-    // weekly (Fri→Thu) or biweekly — anchor: local midnight Friday 2025-01-03
-    const periodDays = pp === 'biweekly' ? 14 : 7;
-    const anchor = new Date(2025, 0, 3); // local midnight Jan 3 2025
+    const periodDays = pp==='biweekly'?14:pp==='monthly'?30:7;
+    const anchor = new Date('2025-01-03');
     const daysSinceAnchor = Math.floor((now - anchor) / 86400000);
     const currentPeriodIndex = Math.floor(daysSinceAnchor / periodDays);
 
@@ -1891,8 +1898,8 @@ function getPayPeriods() {
       const end = new Date(start);
       end.setDate(start.getDate() + periodDays - 1);
       periods.push({
-        from: localDateStr(start),
-        to:   localDateStr(end),
+        from: start.toISOString().split('T')[0],
+        to:   end.toISOString().split('T')[0],
         current: i === 0
       });
     }
@@ -1974,6 +1981,15 @@ function togglePeriod(id) {
   const isOpen = body.classList.toggle('open');
   arrow?.classList.toggle('open', isOpen);
 }
+
+function toggleTimeEntries() {
+  const body  = document.getElementById('time-entries-body');
+  const arrow = document.getElementById('time-entries-arrow');
+  if (!body) return;
+  const isOpen = body.classList.toggle('open');
+  arrow?.classList.toggle('open', isOpen);
+}
+
 
 function exportPayroll() {
   const empId = document.getElementById('payroll-emp-filter').value;
@@ -2241,9 +2257,9 @@ async function saveSettings() {
   try {
     const sid = store._settingsId || 1;
     await sb('settings','PATCH',updates,`?id=eq.${sid}`);
-    store.settings = { ...store.settings, email:em, payPeriod:pp, bizName:biz };
+    store.settings = {email:em, payPeriod:pp, bizName:biz};
     if (resendKey) { store.settings.resendKey = resendKey; window.RESEND_API_KEY = resendKey; }
-    if (osId) { store.settings.onesignalId = osId; window.ONESIGNAL_APP_ID = osId; }
+    if (osId) { store.settings.onesignalId = osId; }
     document.getElementById('setting-resend-key').value = '';
     document.getElementById('setting-onesignal-id').value = '';
     document.getElementById('setting-pass1').value='';
@@ -2508,7 +2524,6 @@ wire('cancel-edit-entry',  'click', ()=>closeModal('modal-edit-entry'));
 wire('confirm-edit-entry', 'click', saveEditEntry);
 wire('delete-edit-entry',  'click', async()=>{
   if (!editingEntryId) return;
-  if (!confirm('Delete this time entry? This cannot be undone.')) return;
   try {
     await sb('time_entries','DELETE',null,`?id=eq.${editingEntryId}`);
     store.timeEntries = store.timeEntries.filter(e=>e.id!==editingEntryId);
@@ -2561,17 +2576,25 @@ document.getElementById('confirm-add-loc').addEventListener('click',async()=>{
 
   try {
     if (editingLocId) {
-      await sb('locations','PATCH',{name,address:addr,color},`?id=eq.${editingLocId}`);
+      await sb('locations','PATCH',{name,address:addr},`?id=eq.${editingLocId}`);
       const l = store.locations.find(l=>l.id===editingLocId);
       if (l) { l.name=name; l.address=addr; l.color=color; }
+      // Store color locally since schema cache is unreliable
+      const colors = JSON.parse(localStorage.getItem('citadel_loc_colors')||'{}');
+      colors[editingLocId] = color;
+      localStorage.setItem('citadel_loc_colors', JSON.stringify(colors));
       closeModal('modal-add-location');
       resetModal();
       renderLocationList();
       showToast('Location updated','success');
     } else {
-      const saved=await sb('locations','POST',{name,address:addr,color});
+      const saved=await sb('locations','POST',{name,address:addr});
       const newLoc = {...saved[0], color};
       store.locations.push(newLoc);
+      // Store color locally
+      const colors = JSON.parse(localStorage.getItem('citadel_loc_colors')||'{}');
+      colors[saved[0].id] = color;
+      localStorage.setItem('citadel_loc_colors', JSON.stringify(colors));
       closeModal('modal-add-location');
       resetModal();
       renderLocationList();
@@ -2619,8 +2642,7 @@ async function initOneSignal() {
 }
 
 async function oneSignalLogin(user) {
-  const activeOSId = window.ONESIGNAL_APP_ID || ONESIGNAL_APP_ID;
-  if (!activeOSId || activeOSId === 'YOUR_ONESIGNAL_APP_ID') return;
+  if (!ONESIGNAL_APP_ID || ONESIGNAL_APP_ID === 'YOUR_ONESIGNAL_APP_ID') return;
   OneSignalDeferred.push(async function(OneSignal) {
     try {
       await OneSignal.login(String(user.id));
@@ -2635,8 +2657,7 @@ async function oneSignalLogin(user) {
 // calls the OneSignal REST API with the server API key (never expose
 // the OneSignal REST API key in client-side code).
 async function queuePushNotification(title, body, data) {
-  const activeOSId = window.ONESIGNAL_APP_ID || ONESIGNAL_APP_ID;
-  if (!activeOSId || activeOSId === 'YOUR_ONESIGNAL_APP_ID') return;
+  if (!ONESIGNAL_APP_ID || ONESIGNAL_APP_ID === 'YOUR_ONESIGNAL_APP_ID') return;
   try {
     await sb('notifications', 'POST', {
       title,
@@ -2649,8 +2670,7 @@ async function queuePushNotification(title, body, data) {
 }
 
 async function scheduleShiftReminder(shift, employeeName) {
-  const activeOSId = window.ONESIGNAL_APP_ID || ONESIGNAL_APP_ID;
-  if (!activeOSId || activeOSId === 'YOUR_ONESIGNAL_APP_ID') return;
+  if (!ONESIGNAL_APP_ID || ONESIGNAL_APP_ID === 'YOUR_ONESIGNAL_APP_ID') return;
   try {
     const reminderTime = new Date(shift.date + 'T09:00:00');
     if (reminderTime < new Date()) return;
