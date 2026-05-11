@@ -1310,7 +1310,7 @@ async function doClock(action) {
         });
       }
       const fresh = await sb('time_entries','GET',null,`?user_id=eq.${currentUser.id}&order=date.desc`);
-      store.timeEntries = fresh.map(e=>({...e, userId:e.user_id, clockIn:e.clock_in, clockOut:e.clock_out}));
+      store.timeEntries = fresh.map(e=>({...e, userId:e.user_id, clockIn:e.clock_in, clockOut:e.clock_out, location:e.site}));
     } catch(e) { showToast('Error saving entry: '+e.message,'error'); return; }
     clockedInAt = null;
     localStorage.removeItem(clockKey());
@@ -1333,7 +1333,7 @@ function renderClockLog() {
   const tbody = document.getElementById('clock-log');
   if (!tbody) return;
   tbody.innerHTML = entries.length
-    ? entries.slice(0,20).map(e=>`<tr><td><strong>${formatDate(e.date)}</strong></td><td>${e.clockIn}</td><td>${e.clockOut||'<span style="color:var(--success-light)">Active</span>'}</td><td>${e.location||'—'}</td><td><strong>${parseFloat(e.hours).toFixed(2)}</strong></td></tr>`).join('')
+    ? entries.slice(0,20).map(e=>`<tr><td><strong>${formatDate(e.date)}</strong></td><td>${e.clockIn}</td><td>${e.clockOut||'<span style="color:var(--success-light)">Active</span>'}</td><td>${e.location||'—'}</td><td><strong>${e.hours!=null?parseFloat(e.hours).toFixed(2):'—'}</strong></td></tr>`).join('')
     : `<tr><td colspan="5" class="empty">NO ENTRIES YET</td></tr>`;
   const tot = entries.reduce((s,e)=>s+parseFloat(e.hours||0),0);
   const ph = document.getElementById('period-hours');
@@ -1516,11 +1516,8 @@ async function submitIncident() {
   const datetimeEnd = document.getElementById('inc-datetime-end').value;
   const desc        = document.getElementById('inc-desc').value.trim();
   const actions     = document.getElementById('inc-actions').value.trim();
-  if (!title||!location||!datetime||!desc||!selectedSev) { 
-    if (!datetime) showToast('Please set the Time of Incident','error');
-    else showToast('Fill in all required fields + severity','error'); 
-    return; 
-  }
+  if (!datetime) { showToast('Please set the Time of Incident','error'); return; }
+  if (!title||!location||!desc||!selectedSev) { showToast('Fill in all required fields + severity','error'); return; }
 
   // Format end time into description so no extra column needed
   const endTimeLabel = datetimeEnd ? `\n[End of Incident: ${new Date(datetimeEnd).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}]` : '';
@@ -1535,7 +1532,7 @@ async function submitIncident() {
     user_id: currentUser.id,
     title,
     location,
-    incident_datetime: datetime || new Date().toISOString().slice(0,16),
+    incident_datetime: datetime,
     severity: selectedSev,
     description: fullDesc,
     actions_taken: actions
@@ -1580,6 +1577,8 @@ function renderEmpIncidents() {
   list.innerHTML = incs.length ? incs.map(i=>incHtml(i,false)).join('') : `<div class="empty">No reports filed yet.</div>`;
 }
 
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
 function incHtml(i, showUser) {
   const sc  = i.severity==='Low'?'low':i.severity==='Medium'?'med':'high';
   const dt  = new Date(i.datetime);
@@ -1594,10 +1593,10 @@ function incHtml(i, showUser) {
     return `<div class="inc-item inc-${sc}" style="margin-bottom:14px;">
       <div class="inc-hdr" style="margin-bottom:10px;">
         <div style="flex:1;">
-          <div class="inc-ttl" style="font-size:16px;margin-bottom:4px;">${i.title}</div>
+          <div class="inc-ttl" style="font-size:16px;margin-bottom:4px;">${esc(i.title)}</div>
           <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
-            <span class="sev-badge sb-${sc}">${i.severity}</span>
-            ${u?`<span style="font-family:'Barlow Condensed',sans-serif;font-size:11px;color:var(--silver-light);letter-spacing:1px;">👤 ${u.name}</span>`:''}
+            <span class="sev-badge sb-${sc}">${esc(i.severity)}</span>
+            ${u?`<span style="font-family:'Barlow Condensed',sans-serif;font-size:11px;color:var(--silver-light);letter-spacing:1px;">👤 ${esc(u.name)}</span>`:''}
           </div>
         </div>
         <button type="button" class="btn btn-danger btn-xs" onclick="deleteIncident(${i.id})">DEL</button>
@@ -1613,16 +1612,16 @@ function incHtml(i, showUser) {
         </div>
         <div style="background:rgba(0,0,0,0.2);border-radius:6px;padding:10px;">
           <div style="font-family:'Barlow Condensed',sans-serif;font-size:9px;letter-spacing:2px;color:var(--silver);margin-bottom:4px;">LOCATION</div>
-          <div style="font-family:'Barlow Condensed',sans-serif;font-size:13px;color:var(--chrome);">📍 ${i.location}</div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:13px;color:var(--chrome);">📍 ${esc(i.location)}</div>
         </div>
       </div>
       <div style="margin-bottom:8px;">
         <div style="font-family:'Barlow Condensed',sans-serif;font-size:9px;letter-spacing:2px;color:var(--silver);margin-bottom:6px;">DESCRIPTION</div>
-        <div class="inc-body" style="font-size:14px;line-height:1.7;">${i.desc}</div>
+        <div class="inc-body" style="font-size:14px;line-height:1.7;">${esc(i.desc)}</div>
       </div>
       ${i.actions?`<div>
         <div style="font-family:'Barlow Condensed',sans-serif;font-size:9px;letter-spacing:2px;color:var(--silver);margin-bottom:6px;">ACTIONS TAKEN</div>
-        <div class="inc-body" style="font-size:13px;line-height:1.6;color:var(--silver-light);">${i.actions}</div>
+        <div class="inc-body" style="font-size:13px;line-height:1.6;color:var(--silver-light);">${esc(i.actions)}</div>
       </div>`:''}
     </div>`;
   } else {
@@ -1630,11 +1629,11 @@ function incHtml(i, showUser) {
     const timeRange = dtEnd ? `${dateStr} ${timeStart} – ${timeEnd}` : `${dateStr} ${timeStart}`;
     return `<div class="inc-item inc-${sc}">
       <div class="inc-hdr">
-        <div><div class="inc-ttl">${i.title}</div><div class="inc-meta">${i.location} · ${timeRange}</div></div>
-        <span class="sev-badge sb-${sc}">${i.severity}</span>
+        <div><div class="inc-ttl">${esc(i.title)}</div><div class="inc-meta">${esc(i.location)} · ${timeRange}</div></div>
+        <span class="sev-badge sb-${sc}">${esc(i.severity)}</span>
       </div>
-      <div class="inc-body">${i.desc}</div>
-      ${i.actions?`<div class="inc-body" style="margin-top:6px;border-top:1px solid var(--border);padding-top:6px;font-size:11px;color:var(--silver);">ACTIONS: ${i.actions}</div>`:''}
+      <div class="inc-body">${esc(i.desc)}</div>
+      ${i.actions?`<div class="inc-body" style="margin-top:6px;border-top:1px solid var(--border);padding-top:6px;font-size:11px;color:var(--silver);">ACTIONS: ${esc(i.actions)}</div>`:''}
     </div>`;
   }
 }
@@ -2724,6 +2723,7 @@ async function emailIncidentReport(incident, mediaUrls) {
     description:       incident.description || 'N/A',
     actions_taken:     incident.actions_taken || 'N/A',
     media_links:       mediaList,
+    message_html:      buildIncidentEmailHtml(incident, reporterName, mediaUrls),
     // 'message' is a catch-all plain-text body in case your template uses {{message}}
     message: [
       'INCIDENT REPORT',
@@ -2761,24 +2761,25 @@ function buildIncidentEmailHtml(incident, reporterName, mediaUrls) {
     ? new Date(incident.incident_datetime).toLocaleString('en-US', {month:'long',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'})
     : 'N/A';
   const sevColor = incident.severity === 'High' ? '#c04040' : incident.severity === 'Medium' ? '#b8a060' : '#40a060';
+  function he(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
   const mediaSection = (mediaUrls && mediaUrls.length)
     ? '<p><strong>Media (' + mediaUrls.length + ' file' + (mediaUrls.length > 1 ? 's' : '') + '):</strong><br>' +
-      mediaUrls.map(function(u){ return '<a href="' + u + '">' + u + '</a>'; }).join('<br>') + '</p>'
+      mediaUrls.map(function(u){ return '<a href="' + he(u) + '">' + he(u) + '</a>'; }).join('<br>') + '</p>'
     : '';
   return '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#f9f9f9;padding:24px;border-radius:8px;">' +
     '<div style="background:#0a0a0c;padding:16px 24px;border-radius:6px;margin-bottom:20px;">' +
     '<h1 style="color:#e2e2ee;font-size:18px;margin:0;letter-spacing:2px;">CITADEL GROUP SECURITY SOLUTIONS</h1>' +
     '<p style="color:#9a9aaa;font-size:12px;margin:4px 0 0;letter-spacing:1px;">INCIDENT REPORT</p></div>' +
     '<table style="width:100%;border-collapse:collapse;">' +
-    '<tr><td style="padding:8px 0;color:#555;width:140px;"><strong>Title</strong></td><td>' + incident.title + '</td></tr>' +
-    '<tr><td style="padding:8px 0;color:#555;"><strong>Severity</strong></td><td><span style="background:' + sevColor + ';color:#fff;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:bold;">' + incident.severity + '</span></td></tr>' +
-    '<tr><td style="padding:8px 0;color:#555;"><strong>Location</strong></td><td>' + incident.location + '</td></tr>' +
+    '<tr><td style="padding:8px 0;color:#555;width:140px;"><strong>Title</strong></td><td>' + he(incident.title) + '</td></tr>' +
+    '<tr><td style="padding:8px 0;color:#555;"><strong>Severity</strong></td><td><span style="background:' + sevColor + ';color:#fff;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:bold;">' + he(incident.severity) + '</span></td></tr>' +
+    '<tr><td style="padding:8px 0;color:#555;"><strong>Location</strong></td><td>' + he(incident.location) + '</td></tr>' +
     '<tr><td style="padding:8px 0;color:#555;"><strong>Date &amp; Time</strong></td><td>' + dt + '</td></tr>' +
-    '<tr><td style="padding:8px 0;color:#555;"><strong>Reported By</strong></td><td>' + reporterName + '</td></tr>' +
+    '<tr><td style="padding:8px 0;color:#555;"><strong>Reported By</strong></td><td>' + he(reporterName) + '</td></tr>' +
     '</table><hr style="border:none;border-top:1px solid #ddd;margin:16px 0;"/>' +
     '<p><strong>Description:</strong></p>' +
-    '<p style="background:#fff;padding:12px;border-radius:4px;border:1px solid #ddd;">' + (incident.description || '').replace(/\n/g, '<br>') + '</p>' +
-    (incident.actions_taken ? '<p><strong>Actions Taken:</strong></p><p style="background:#fff;padding:12px;border-radius:4px;border:1px solid #ddd;">' + incident.actions_taken.replace(/\n/g, '<br>') + '</p>' : '') +
+    '<p style="background:#fff;padding:12px;border-radius:4px;border:1px solid #ddd;">' + he(incident.description || '').replace(/\n/g, '<br>') + '</p>' +
+    (incident.actions_taken ? '<p><strong>Actions Taken:</strong></p><p style="background:#fff;padding:12px;border-radius:4px;border:1px solid #ddd;">' + he(incident.actions_taken).replace(/\n/g, '<br>') + '</p>' : '') +
     mediaSection +
     '<p style="color:#aaa;font-size:11px;margin-top:24px;">Auto-generated by Citadel Group workforce management system.</p></div>';
 }
