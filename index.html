@@ -1947,12 +1947,13 @@ function renderPayroll() {
         <td>${formatDate(e.date)}</td>
         <td>${e.clockIn||'—'}</td>
         <td>${e.clockOut||'—'}</td>
+        <td>${e.location||e.site||'—'}</td>
         <td><strong>${hrs.toFixed(2)}</strong><br><span style="font-size:11px;color:var(--silver);">${toHHMM(hrs)}</span></td>
         <td>$${(u?.rate||0).toFixed(2)}/hr</td>
         <td><strong>$${pay.toFixed(2)}</strong></td>
       </tr>`;
-    }).join('') + `<tr class="pay-total"><td colspan="4">TOTALS</td><td><strong>${tH.toFixed(2)}</strong><br><span style="font-size:11px;">${toHHMM(tH)}</span></td><td>—</td><td>$${tP.toFixed(2)}</td></tr>`
-    : `<tr><td colspan="7" class="empty">No entries this period</td></tr>`;
+    }).join('') + `<tr class="pay-total"><td colspan="5">TOTALS</td><td><strong>${tH.toFixed(2)}</strong><br><span style="font-size:11px;">${toHHMM(tH)}</span></td><td>—</td><td>$${tP.toFixed(2)}</td></tr>`
+    : `<tr><td colspan="8" class="empty">No entries this period</td></tr>`;
 
     html += `
       <div class="pay-period-block">
@@ -1963,7 +1964,7 @@ function renderPayroll() {
         </div>
         <div class="pay-period-body${isOpen?' open':''}" id="${periodId}">
           <table>
-            <thead><tr><th>Employee</th><th>Date</th><th>In</th><th>Out</th><th>Hrs</th><th>Rate</th><th>Pay</th></tr></thead>
+            <thead><tr><th>Employee</th><th>Date</th><th>In</th><th>Out</th><th>Site</th><th>Hrs</th><th>Rate</th><th>Pay</th></tr></thead>
             <tbody>${rowsHtml}</tbody>
           </table>
         </div>
@@ -2320,6 +2321,7 @@ function renderDashEntries() {
         const hrs = parseFloat(e.hours||0);
         return `<tr>
           <td><strong>${u?.name||'?'}</strong></td>
+          <td>${e.location||e.site||'—'}</td>
           <td>${e.clockIn||'—'}</td>
           <td>${e.clockOut||'<span style="color:var(--success-light)">Active</span>'}</td>
           <td>${hrs?hrs.toFixed(2):'—'}</td>
@@ -2335,7 +2337,7 @@ function renderDashEntries() {
           </div>
           <div class="pay-period-body open" id="${periodId}">
             <table>
-              <thead><tr><th>Employee</th><th>In</th><th>Out</th><th>Hrs</th><th></th></tr></thead>
+              <thead><tr><th>Employee</th><th>Site</th><th>In</th><th>Out</th><th>Hrs</th><th></th></tr></thead>
               <tbody>${rowsHtml}</tbody>
             </table>
           </div>
@@ -2364,13 +2366,14 @@ function renderDashEntries() {
             return `<tr>
               <td><strong>${u?.name||'?'}</strong></td>
               <td>${formatDate(e.date)}</td>
+              <td>${e.location||e.site||'—'}</td>
               <td>${e.clockIn||'—'}</td>
               <td>${e.clockOut||'<span style="color:var(--success-light)">Active</span>'}</td>
               <td>${hrs?hrs.toFixed(2):'—'}</td>
               <td><button type="button" class="btn btn-outline btn-xs" onclick="openEditEntry(${e.id})">EDIT</button></td>
             </tr>`;
           }).join('')
-        : `<tr><td colspan="6" class="empty">No entries this period</td></tr>`;
+        : `<tr><td colspan="7" class="empty">No entries this period</td></tr>`;
       html += `
         <div class="pay-period-block">
           <div class="pay-period-hdr" onclick="togglePeriod('${periodId}')">
@@ -2380,7 +2383,7 @@ function renderDashEntries() {
           </div>
           <div class="pay-period-body${isOpen?' open':''}" id="${periodId}">
             <table>
-              <thead><tr><th>Employee</th><th>Date</th><th>In</th><th>Out</th><th>Hrs</th><th></th></tr></thead>
+              <thead><tr><th>Employee</th><th>Date</th><th>Site</th><th>In</th><th>Out</th><th>Hrs</th><th></th></tr></thead>
               <tbody>${rowsHtml}</tbody>
             </table>
           </div>
