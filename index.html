@@ -636,14 +636,18 @@ tbody td strong{color:var(--white);}
 
 <!-- MODALS -->
 <div class="modal-overlay" id="modal-add-employee">
-  <div class="modal">
+  <div class="modal" style="max-width:480px;">
     <button type="button" class="modal-close" id="close-add-emp">&#10005;</button>
     <div class="modal-title" id="emp-modal-title">Add Employee</div>
     <div class="field"><label>Full Name</label><input type="text" id="new-emp-name" placeholder="John Smith"/></div>
     <div class="field"><label>Email</label><input type="text" inputmode="email" id="new-emp-email" placeholder="john@email.com"/></div>
     <div class="field"><label>Phone</label><input type="tel" id="new-emp-phone" placeholder="(555) 555-5555"/></div>
     <div class="field"><label id="pass-label">Password</label><input type="password" id="new-emp-pass" placeholder="Temporary password"/></div>
-    <div class="field"><label>Hourly Rate ($)</label><input type="number" id="new-emp-rate" placeholder="15.00" step="0.01" min="0"/></div>
+    <div class="field"><label>Default Hourly Rate ($)</label><input type="number" id="new-emp-rate" placeholder="15.00" step="0.01" min="0"/></div>
+    <div class="field" id="emp-site-rates-field" style="display:none;">
+      <label style="margin-bottom:8px;display:block;">Pay Rates by Site <span style="font-size:11px;color:var(--silver);font-weight:400;">(overrides default)</span></label>
+      <div id="emp-site-rates-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+    </div>
     <div class="modal-footer">
       <button type="button" class="btn btn-outline btn-sm" id="cancel-add-emp">CANCEL</button>
       <button type="button" class="btn btn-chrome btn-sm" id="confirm-add-emp">SAVE</button>
@@ -864,12 +868,13 @@ const store = {
   incidents: [],
   timeOffRequests: [],
   settings: { email:'', payPeriod:'weekly', bizName:'Citadel Group Security Solutions' },
+  payRates: [], // [{userId, locationName, rate}]
 };
 
 async function loadAllData() {
   showLoader(true);
   try {
-    const [users, locations, shifts, entries, incidents, timeoff, settings] = await Promise.all([
+    const [users, locations, shifts, entries, incidents, timeoff, settings, payRates] = await Promise.all([
       sb('users', 'GET', null, '?select=*&order=name'),
       sb('locations', 'GET', null, '?select=*&order=name'),
       sb('shifts', 'GET', null, '?select=*&order=date'),
@@ -877,8 +882,14 @@ async function loadAllData() {
       sb('incidents', 'GET', null, '?select=*&order=created_at.desc'),
       sb('time_off_requests', 'GET', null, '?select=*&order=created_at.desc'),
       sb('settings', 'GET', null, '?select=*&limit=1'),
+      sb('pay_rates', 'GET', null, '?select=*').catch(()=>[]),
     ]);
     store.users         = users.map(u=>({...u, id:u.id}));
+    store.locations     = locations.map(l=>{
+      const colors = JSON.parse(localStorage.getItem('citadel_loc_colors')||'{}');
+      return {...l, color: l.color || colors[l.id] || '#6b6b7a'};
+    });
+    store.payRates      = (payRates||[]).map(r=>({userId:r.user_id, locationName:r.location_name, rate:parseFloat(r.rate||0)}));
     store.locations     = locations.map(l=>{
       const colors = JSON.parse(localStorage.getItem('citadel_loc_colors')||'{}');
       return {...l, color: l.color || colors[l.id] || '#6b6b7a'};
@@ -1852,6 +1863,14 @@ async function saveShift() {
 // ══════════════════════════════════════
 // PAYROLL
 // ══════════════════════════════════════
+// Returns the pay rate for a user at a specific site, falling back to default rate
+function getEffectiveRate(userId, locationName) {
+  const siteRate = store.payRates.find(r => r.userId === userId && r.locationName === locationName);
+  if (siteRate && siteRate.rate > 0) return siteRate.rate;
+  const u = store.users.find(u => u.id === userId);
+  return parseFloat(u?.rate || 0);
+}
+
 function renderPayrollFilters() {
   const sel = document.getElementById('payroll-emp-filter');
   if (!sel) return;
@@ -1927,8 +1946,8 @@ function renderPayroll() {
     let tH = 0, tP = 0;
     entries.forEach(e => {
       tH += parseFloat(e.hours||0);
-      const u = store.users.find(u=>u.id===e.userId);
-      tP += parseFloat(e.hours||0) * (u?.rate||0);
+      const rate = getEffectiveRate(e.userId, e.location||e.site||'');
+      tP += parseFloat(e.hours||0) * rate;
     });
 
     const isOpen = period.current;
@@ -1941,7 +1960,8 @@ function renderPayroll() {
     const rowsHtml = entries.length ? entries.map(e => {
       const u = store.users.find(u=>u.id===e.userId);
       const hrs = parseFloat(e.hours||0);
-      const pay = hrs * (u?.rate||0);
+      const rate = getEffectiveRate(e.userId, e.location||e.site||'');
+      const pay = hrs * rate;
       return `<tr>
         <td><strong>${u?.name||'?'}</strong></td>
         <td>${formatDate(e.date)}</td>
@@ -1949,7 +1969,7 @@ function renderPayroll() {
         <td>${e.clockOut||'—'}</td>
         <td>${e.location||e.site||'—'}</td>
         <td><strong>${hrs.toFixed(2)}</strong><br><span style="font-size:11px;color:var(--silver);">${toHHMM(hrs)}</span></td>
-        <td>$${(u?.rate||0).toFixed(2)}/hr</td>
+        <td>$${rate.toFixed(2)}/hr</td>
         <td><strong>$${pay.toFixed(2)}</strong></td>
       </tr>`;
     }).join('') + `<tr class="pay-total"><td colspan="5">TOTALS</td><td><strong>${tH.toFixed(2)}</strong><br><span style="font-size:11px;">${toHHMM(tH)}</span></td><td>—</td><td>$${tP.toFixed(2)}</td></tr>`
@@ -2094,7 +2114,27 @@ function openAddEmployee() {
   document.getElementById('new-emp-pass').value = '';
   document.getElementById('new-emp-pass').placeholder = 'Temporary password';
   document.getElementById('new-emp-rate').value = '';
+  renderEmpSiteRatesFields(null);
   openModal('modal-add-employee');
+}
+
+function renderEmpSiteRatesFields(userId) {
+  const field = document.getElementById('emp-site-rates-field');
+  const list  = document.getElementById('emp-site-rates-list');
+  if (!store.locations.length) { field.style.display='none'; return; }
+  field.style.display = 'block';
+  list.innerHTML = store.locations.map(loc => {
+    const existing = userId ? store.payRates.find(r=>r.userId===userId && r.locationName===loc.name) : null;
+    return `<div style="display:flex;align-items:center;gap:10px;">
+      <span style="flex:1;font-family:'Barlow Condensed',sans-serif;font-size:13px;color:var(--silver-light);">${loc.name}</span>
+      <div style="display:flex;align-items:center;gap:4px;">
+        <span style="font-size:12px;color:var(--silver);">$</span>
+        <input type="number" data-site="${loc.name}" placeholder="default" step="0.01" min="0" value="${existing?existing.rate:''}"
+          style="width:80px;background:rgba(255,255,255,0.05);border:1px solid var(--border-bright);border-radius:4px;padding:6px 8px;color:var(--white);font-family:'Barlow Condensed',sans-serif;font-size:13px;outline:none;"/>
+        <span style="font-size:11px;color:var(--silver);">/hr</span>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function openEditEmployee(id) {
@@ -2109,6 +2149,7 @@ function openEditEmployee(id) {
   document.getElementById('new-emp-pass').value  = '';
   document.getElementById('new-emp-pass').placeholder = 'Leave blank to keep current';
   document.getElementById('new-emp-rate').value  = u.rate || '';
+  renderEmpSiteRatesFields(id);
   openModal('modal-add-employee');
 }
 
@@ -2128,6 +2169,27 @@ async function saveEmployee() {
   const rate  = parseFloat(document.getElementById('new-emp-rate').value) || 0;
   if (!name||!email) { showToast('Name and email are required','error'); return; }
 
+  // Collect site-specific rates from the modal
+  const siteRateInputs = document.querySelectorAll('#emp-site-rates-list input[data-site]');
+
+  async function saveSiteRates(userId) {
+    for (const input of siteRateInputs) {
+      const locName = input.dataset.site;
+      const r = parseFloat(input.value);
+      if (!isNaN(r) && r > 0) {
+        await sb('pay_rates','POST',{user_id:userId,location_name:locName,rate:r},
+          '').catch(()=>sb('pay_rates','PATCH',{rate:r},`?user_id=eq.${userId}&location_name=eq.${encodeURIComponent(locName)}`));
+        const existing = store.payRates.find(x=>x.userId===userId&&x.locationName===locName);
+        if (existing) existing.rate = r;
+        else store.payRates.push({userId,locationName:locName,rate:r});
+      } else if (input.value==='' || r===0) {
+        // Remove rate if cleared — use DELETE
+        await sb('pay_rates','DELETE',null,`?user_id=eq.${userId}&location_name=eq.${encodeURIComponent(locName)}`).catch(()=>{});
+        store.payRates = store.payRates.filter(x=>!(x.userId===userId&&x.locationName===locName));
+      }
+    }
+  }
+
   if (editingEmpId) {
     const u = store.users.find(x=>x.id===editingEmpId);
     if (!u) return;
@@ -2139,6 +2201,7 @@ async function saveEmployee() {
     try {
       await sb('users','PATCH',updates,`?id=eq.${editingEmpId}`);
       Object.assign(u, updates);
+      await saveSiteRates(editingEmpId);
       closeModal('modal-add-employee');
       renderEmployeeList();
       showToast(`${name} updated`,'success');
@@ -2152,6 +2215,8 @@ async function saveEmployee() {
       await sb('users','POST',{name,email,phone,password:pass,role:'employee',rate});
       const freshUsers = await sb('users','GET',null,'?select=*&order=name');
       store.users = freshUsers;
+      const newUser = freshUsers.find(x=>x.email.toLowerCase()===email.toLowerCase());
+      if (newUser) await saveSiteRates(newUser.id);
       closeModal('modal-add-employee');
       renderEmployeeList();
       renderPayrollFilters();
