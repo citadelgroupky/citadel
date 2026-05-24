@@ -592,7 +592,6 @@ tbody td strong{color:var(--white);}
           <div class="field">
             <label>Pay Period</label>
             <select id="setting-payperiod">
-              <option value="weekly">Weekly</option>
               <option value="weekly" selected>Weekly</option>
               <option value="biweekly">Bi-Weekly</option>
               <option value="semimonthly">Semi-Monthly</option>
@@ -1886,9 +1885,8 @@ function getPayPeriods() {
   const periods = [];
 
   if (pp === 'weekly') {
-    // Periods run Friday → Thursday
-    // Anchor: Friday 2025-01-03
-    const anchor = new Date('2025-01-03');
+    // Periods run Friday → Thursday, anchor: local midnight Jan 3 2025 (Friday)
+    const anchor = new Date(2025, 0, 3);
     const daysSinceAnchor = Math.floor((now - anchor) / 86400000);
     const currentPeriodIndex = Math.floor(daysSinceAnchor / 7);
 
@@ -1906,7 +1904,7 @@ function getPayPeriods() {
     }
   } else {
     const periodDays = pp==='biweekly'?14:pp==='monthly'?30:7;
-    const anchor = new Date('2025-01-03');
+    const anchor = new Date(2025, 0, 3);
     const daysSinceAnchor = Math.floor((now - anchor) / 86400000);
     const currentPeriodIndex = Math.floor(daysSinceAnchor / periodDays);
 
