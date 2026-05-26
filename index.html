@@ -522,7 +522,10 @@ tbody td strong{color:var(--white);}
     </div>
 
     <div class="page" id="page-aentries">
-      <div class="page-header"><div class="page-title">Time Entries</div></div>
+      <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;">
+        <div class="page-title">Time Entries</div>
+        <button type="button" class="btn btn-chrome btn-sm" onclick="openAddEntry()">+ ADD ENTRY</button>
+      </div>
       <div class="pay-filter" style="margin-bottom:16px;flex-wrap:wrap;gap:10px;">
         <label>EMPLOYEE</label>
         <select id="dash-entries-emp"><option value="all">All Employees</option></select>
@@ -813,6 +816,38 @@ tbody td strong{color:var(--white);}
     <div class="modal-footer" style="margin-top:0;">
       <button type="button" class="btn btn-outline btn-sm" id="cancel-edit-entry">CANCEL</button>
       <button type="button" class="btn btn-chrome btn-sm" id="confirm-edit-entry">SAVE</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-add-entry">
+  <div class="modal" style="max-width:380px;">
+    <button type="button" class="modal-close" onclick="closeModal('modal-add-entry')">&#10005;</button>
+    <div class="modal-title">Add Time Entry</div>
+    <div class="field">
+      <label>Employee</label>
+      <select id="add-entry-emp" style="background:rgba(255,255,255,0.05);border:1px solid var(--border-bright);border-radius:4px;padding:10px;color:var(--white);font-family:'Barlow Condensed',sans-serif;font-size:13px;width:100%;outline:none;"></select>
+    </div>
+    <div class="field">
+      <label>Date</label>
+      <input type="date" id="add-entry-date"/>
+    </div>
+    <div class="field">
+      <label>Site / Location</label>
+      <select id="add-entry-site" style="background:rgba(255,255,255,0.05);border:1px solid var(--border-bright);border-radius:4px;padding:10px;color:var(--white);font-family:'Barlow Condensed',sans-serif;font-size:13px;width:100%;outline:none;"></select>
+    </div>
+    <div class="field">
+      <label>Clock In Time</label>
+      <input type="text" id="add-entry-in" placeholder="e.g. 09:00 AM" style="font-family:'Barlow Condensed',sans-serif;letter-spacing:1px;"/>
+    </div>
+    <div class="field">
+      <label>Clock Out Time</label>
+      <input type="text" id="add-entry-out" placeholder="e.g. 05:00 PM" style="font-family:'Barlow Condensed',sans-serif;letter-spacing:1px;"/>
+    </div>
+    <p style="font-size:11px;color:var(--silver-dark);margin-top:-8px;margin-bottom:12px;">Hours will be calculated automatically from clock in/out times.</p>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-outline btn-sm" onclick="closeModal('modal-add-entry')">CANCEL</button>
+      <button type="button" class="btn btn-chrome btn-sm" id="confirm-add-entry">SAVE</button>
     </div>
   </div>
 </div>
@@ -2342,6 +2377,64 @@ function togglePassword() {
 // ══════════════════════════════════════
 // ADMIN — EDIT TIME ENTRIES
 // ══════════════════════════════════════
+function openAddEntry() {
+  // Populate employee dropdown
+  const empSel = document.getElementById('add-entry-emp');
+  empSel.innerHTML = store.users.filter(u=>u.role==='employee').map(u=>`<option value="${u.id}">${u.name}</option>`).join('');
+  // Populate site dropdown
+  const siteSel = document.getElementById('add-entry-site');
+  siteSel.innerHTML = `<option value="">-- No site --</option>` + store.locations.map(l=>`<option value="${l.name}">${l.name}</option>`).join('');
+  // Default date to today
+  document.getElementById('add-entry-date').value = today();
+  document.getElementById('add-entry-in').value = '';
+  document.getElementById('add-entry-out').value = '';
+  openModal('modal-add-entry');
+}
+
+async function saveAddEntry() {
+  const userId  = parseInt(document.getElementById('add-entry-emp').value);
+  const date    = document.getElementById('add-entry-date').value;
+  const site    = document.getElementById('add-entry-site').value;
+  const clockIn = document.getElementById('add-entry-in').value.trim();
+  const clockOut= document.getElementById('add-entry-out').value.trim();
+
+  if (!userId||!date||!clockIn||!clockOut) { showToast('All fields except site are required','error'); return; }
+
+  // Calculate hours
+  function parseTime(t) {
+    const m = t.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+    if (!m) return null;
+    let h = parseInt(m[1]), min = parseInt(m[2]);
+    const ampm = m[3]?.toUpperCase();
+    if (ampm==='PM' && h!==12) h+=12;
+    if (ampm==='AM' && h===12) h=0;
+    return h*60+min;
+  }
+  const inMin  = parseTime(clockIn);
+  const outMin = parseTime(clockOut);
+  if (inMin===null||outMin===null) { showToast('Invalid time format. Use e.g. 09:00 AM','error'); return; }
+  let diff = outMin - inMin;
+  if (diff < 0) diff += 24*60; // overnight shift
+  const hours = parseFloat((diff/60).toFixed(4));
+
+  try {
+    const saved = await sb('time_entries','POST',{
+      user_id: userId,
+      date,
+      clock_in: clockIn,
+      clock_out: clockOut,
+      hours,
+      site: site || null,
+    });
+    if (saved && saved[0]) {
+      store.timeEntries.unshift({...saved[0], userId, clockIn, clockOut, location: site||null});
+    }
+    closeModal('modal-add-entry');
+    renderDashEntries();
+    showToast('Entry added','success');
+  } catch(e) { showToast('Error: '+e.message,'error'); }
+}
+
 let editingEntryId = null;
 
 function renderDashEntries() {
@@ -2587,6 +2680,7 @@ wire('delete-edit-shift',  'click', deleteEditShift);
 
 wire('close-edit-entry',   'click', ()=>closeModal('modal-edit-entry'));
 wire('cancel-edit-entry',  'click', ()=>closeModal('modal-edit-entry'));
+wire('confirm-add-entry', 'click', saveAddEntry);
 wire('confirm-edit-entry', 'click', saveEditEntry);
 wire('delete-edit-entry',  'click', async()=>{
   if (!editingEntryId) return;
