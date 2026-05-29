@@ -1752,7 +1752,7 @@ const DAYS = ['MON','TUE','WED','THU','FRI','SAT','SUN'];
 function getWeekDates(offset) {
   const now=new Date(); const day=now.getDay();
   const mon=new Date(now); mon.setDate(now.getDate()-(day===0?6:day-1)+(offset||0)*7);
-  return Array.from({length:7},(_,i)=>{const d=new Date(mon);d.setDate(mon.getDate()+i);return d.toISOString().split('T')[0];});
+  return Array.from({length:7},(_,i)=>{const d=new Date(mon);d.setDate(mon.getDate()+i);return localDateStr(d);});
 }
 
 function renderAdminSchedule() {
