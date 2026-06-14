@@ -1775,11 +1775,11 @@ function renderAdminSchedule() {
     html+=`<div class="sch-emp-cell">${emp.name.split(' ')[0]}</div>`;
     dates.forEach(date=>{
       const shifts=store.shifts.filter(s=>s.userId===emp.id&&s.date===date);
-      html+=`<div class="sch-shift-cell">`;
+      html+=`<div class="sch-shift-cell" data-uid="${emp.id}" data-date="${date}">`;
       shifts.forEach(s=>{
         const loc = store.locations.find(l=>l.name===s.location);
         const color = loc?.color || '#6b6b7a';
-        html+=`<div class="shift-block" style="border-left:3px solid ${color};">
+        html+=`<div class="shift-block" draggable="true" data-shift-id="${s.id}" style="border-left:3px solid ${color};cursor:grab;">
           <div class="shift-time">${fmt12(s.start)} – ${fmt12(s.end)}</div>
           <div class="shift-loc" style="color:${color};">${s.location}</div>
           <button type="button" class="shift-edit-btn" data-shift-id="${s.id}">EDIT</button>
@@ -1803,6 +1803,50 @@ function renderAdminSchedule() {
     btn.addEventListener('click', e=>{
       e.stopPropagation();
       openAddShift(parseInt(btn.dataset.uid), btn.dataset.date);
+    });
+  });
+
+  // ── Drag and drop: copy shift to another employee/date ──
+  cont.querySelectorAll('.shift-block').forEach(block=>{
+    block.addEventListener('dragstart', e=>{
+      e.dataTransfer.setData('text/plain', block.dataset.shiftId);
+      e.dataTransfer.effectAllowed = 'copy';
+      block.style.opacity = '0.5';
+    });
+    block.addEventListener('dragend', ()=>{ block.style.opacity = '1'; });
+  });
+  cont.querySelectorAll('.sch-shift-cell').forEach(cell=>{
+    cell.addEventListener('dragover', e=>{
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      cell.style.background = 'rgba(184,160,96,0.15)';
+    });
+    cell.addEventListener('dragleave', ()=>{ cell.style.background = ''; });
+    cell.addEventListener('drop', async e=>{
+      e.preventDefault();
+      cell.style.background = '';
+      const shiftId = parseInt(e.dataTransfer.getData('text/plain'));
+      const source = store.shifts.find(s=>s.id===shiftId);
+      if (!source) return;
+      const targetUid = parseInt(cell.dataset.uid);
+      const targetDate = cell.dataset.date;
+      // Don't duplicate onto same employee/date
+      if (source.userId === targetUid && source.date === targetDate) return;
+      try {
+        const saved = await sb('shifts','POST',{
+          user_id: targetUid,
+          date: targetDate,
+          start_time: source.start,
+          end_time: source.end,
+          location: source.location
+        });
+        if (saved && saved[0]) {
+          store.shifts.push({...saved[0], userId: targetUid, start: source.start, end: source.end});
+        }
+        renderAdminSchedule();
+        const u = store.users.find(u=>u.id===targetUid);
+        showToast(`Shift copied to ${u?.name||'employee'}`,'success');
+      } catch(err) { showToast('Error copying shift: '+err.message,'error'); }
     });
   });
 }
