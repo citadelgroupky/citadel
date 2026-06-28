@@ -1311,7 +1311,30 @@ async function doClock(action) {
     const locSel = document.getElementById('clock-location-select');
     const loc = locSel ? locSel.value : '';
     if (!loc) { showToast('Please select a location first', 'error'); return; }
-    // Write clock-in row immediately so Who's Clocked In shows live
+    // Disable button immediately to prevent double-tap
+    const btnIn = document.getElementById('btn-clock-in');
+    if (btnIn) btnIn.disabled = true;
+    // Check for existing open clock-in for this user (prevent duplicates)
+    try {
+      const existing = await sb('time_entries','GET',null,`?user_id=eq.${currentUser.id}&clock_out=is.null&select=*`);
+      if (existing && existing.length) {
+        // Already clocked in — adopt that entry instead of creating a new row
+        const open = existing[0];
+        localStorage.setItem(clockKey()+'_rowid', open.id.toString());
+        localStorage.setItem(clockKey()+'_loc', open.site || loc);
+        // Clean up any extra duplicate open rows
+        for (let i = 1; i < existing.length; i++) {
+          await sb('time_entries','DELETE',null,`?id=eq.${existing[i].id}`).catch(()=>{});
+        }
+        clockedInAt = new Date();
+        localStorage.setItem(clockKey(), clockedInAt.getTime().toString());
+        syncClockUI(true);
+        startClockTimer();
+        showToast('Already clocked in — resumed session', 'success');
+        return;
+      }
+    } catch(e) { /* continue to create new */ }
+    // Create new clock-in row
     try {
       const result = await sb('time_entries','POST',{
         user_id:  currentUser.id,
@@ -1322,6 +1345,7 @@ async function doClock(action) {
       const saved = result && result[0] ? result[0] : null;
       if (saved && saved.id) localStorage.setItem(clockKey()+'_rowid', saved.id.toString());
     } catch(e) {
+      if (btnIn) btnIn.disabled = false;
       showToast('Error clocking in: '+e.message,'error'); return;
     }
     clockedInAt = now;
@@ -1722,12 +1746,19 @@ function renderAdminDash() {
         </div>`).join('')
     : '<div class="empty" style="padding:16px 0;">No incidents on record.</div>';
   lower.innerHTML = `<div class="card" style="margin-bottom:14px;"><div class="card-title">Who's Clocked In</div><div id="admin-clocked-in-list"><div class="empty" style="padding:8px 0;">Loading...</div></div></div><div class="card"><div class="card-title">Recent Incidents</div>${incHtml2}</div>`;
-  // Load clocked-in employees from Supabase
-  sb('time_entries','GET',null,`?date=eq.${today()}&clock_out=is.null&select=*`).then(entries=>{
+  // Load clocked-in employees from Supabase (deduplicate by user_id)
+  sb('time_entries','GET',null,`?date=eq.${today()}&clock_out=is.null&select=*&order=clock_in.asc`).then(entries=>{
     const el = document.getElementById('admin-clocked-in-list');
     if (!el) return;
-    if (!entries.length) { el.innerHTML='<div class="empty" style="padding:8px 0;">No one is currently clocked in.</div>'; return; }
-    el.innerHTML = entries.map(e=>{
+    // Deduplicate — keep only the earliest open entry per user
+    const seen = new Set();
+    const unique = entries.filter(e => {
+      if (seen.has(e.user_id)) return false;
+      seen.add(e.user_id);
+      return true;
+    });
+    if (!unique.length) { el.innerHTML='<div class="empty" style="padding:8px 0;">No one is currently clocked in.</div>'; return; }
+    el.innerHTML = unique.map(e=>{
       const u = store.users.find(u=>u.id===e.user_id);
       return `<div class="clocked-in-item">
         <span class="ci-dot"></span>
