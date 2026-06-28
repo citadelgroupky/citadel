@@ -1192,8 +1192,18 @@ function showAdminPage(id) {
 // ══════════════════════════════════════
 function renderOverview() {
   const pp        = getPayPeriods()[0];
-  const myEntries = store.timeEntries.filter(e=>e.userId===currentUser.id && e.date>=pp.from && e.date<=pp.to);
-  const myHrs     = myEntries.reduce((s,e)=>s+parseFloat(e.hours||0),0);
+  const myEntries = store.timeEntries.filter(e=>{
+    if (e.userId !== currentUser.id) return false;
+    // Normalize date to YYYY-MM-DD string for comparison
+    const d = String(e.date||'').slice(0,10);
+    return d >= pp.from && d <= pp.to;
+  });
+  const myHrs     = myEntries.reduce((s,e)=>{
+    const h = parseFloat(e.hours||0);
+    // Defensive: ignore absurd hours (corrupted data, broken sessions)
+    return s + (h > 0 && h < 24 ? h : 0);
+  }, 0);
+  console.log('[Overview] Pay period:', pp.from, 'to', pp.to, '| Entries:', myEntries.length, '| Hours:', myHrs.toFixed(2));
   const myShifts  = store.shifts.filter(s=>s.userId===currentUser.id);
   const next      = myShifts.filter(s=>s.date>=today()).sort((a,b)=>a.date.localeCompare(b.date))[0];
   const isClockedIn = !!clockedInAt;
@@ -2007,8 +2017,8 @@ function getPayPeriods() {
       const end = new Date(start);
       end.setDate(start.getDate() + 6); // Thursday
       periods.push({
-        from: start.toISOString().split('T')[0],
-        to:   end.toISOString().split('T')[0],
+        from: localDateStr(start),
+        to:   localDateStr(end),
         current: i === 0
       });
     }
@@ -2025,8 +2035,8 @@ function getPayPeriods() {
       const end = new Date(start);
       end.setDate(start.getDate() + periodDays - 1);
       periods.push({
-        from: start.toISOString().split('T')[0],
-        to:   end.toISOString().split('T')[0],
+        from: localDateStr(start),
+        to:   localDateStr(end),
         current: i === 0
       });
     }
