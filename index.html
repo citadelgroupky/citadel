@@ -1728,9 +1728,14 @@ function toHHMM(decimal) {
 function renderAdminDash() {
   const totalEmp = store.users.filter(u=>u.role==='employee').length;
   const hrsToday = store.timeEntries.filter(e=>e.date===today()).reduce((s,e)=>s+parseFloat(e.hours||0),0);
-  const ppStart = document.getElementById('payroll-from') ? document.getElementById('payroll-from').value : '';
-  const ppEnd   = document.getElementById('payroll-to')   ? document.getElementById('payroll-to').value   : '';
-  const hrsPayPeriod = store.timeEntries.filter(e=>(!ppStart||e.date>=ppStart)&&(!ppEnd||e.date<=ppEnd)&&e.hours).reduce((s,e)=>s+parseFloat(e.hours||0),0);
+  const pp = getPayPeriods()[0];
+  const ppStart = (document.getElementById('payroll-from') && document.getElementById('payroll-from').value) || pp.from;
+  const ppEnd   = (document.getElementById('payroll-to')   && document.getElementById('payroll-to').value)   || pp.to;
+  const hrsPayPeriod = store.timeEntries.filter(e=>{
+    const d = String(e.date||'').slice(0,10);
+    const h = parseFloat(e.hours||0);
+    return d>=ppStart && d<=ppEnd && h>0 && h<24;
+  }).reduce((s,e)=>s+parseFloat(e.hours||0),0);
   const highInc  = store.incidents.filter(i=>i.severity==='High').length;
   const pendingTO= store.timeOffRequests.filter(r=>r.status==='Pending').length;
 
