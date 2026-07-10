@@ -1373,9 +1373,12 @@ async function doClock(action) {
     if (!clockedInAt) return;
     const hrs = Math.round((now.getTime() - clockedInAt.getTime()) / 1000 / 36) / 100;
     const rowId = localStorage.getItem(clockKey()+'_rowid');
+    const clockInLoc = localStorage.getItem(clockKey()+'_loc') || '';
+    const lockedRate = getEffectiveRate(currentUser.id, clockInLoc);
     const updates = {
       clock_out: now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true}),
       hours: hrs,
+      locked_rate: lockedRate,
     };
     try {
       if (rowId) {
@@ -1995,6 +1998,12 @@ function getEffectiveRate(userId, locationName) {
   return parseFloat(u?.rate || 0);
 }
 
+// Returns the rate to use for a specific time_entry — uses locked_rate if snapshotted
+function getRateForEntry(e) {
+  if (e && e.locked_rate != null && parseFloat(e.locked_rate) > 0) return parseFloat(e.locked_rate);
+  return getEffectiveRate(e.userId, e.location||e.site||'');
+}
+
 function renderPayrollFilters() {
   const sel = document.getElementById('payroll-emp-filter');
   if (!sel) return;
@@ -2069,7 +2078,7 @@ function renderPayroll() {
     let tH = 0, tP = 0;
     entries.forEach(e => {
       tH += parseFloat(e.hours||0);
-      const rate = getEffectiveRate(e.userId, e.location||e.site||'');
+      const rate = getRateForEntry(e);
       tP += parseFloat(e.hours||0) * rate;
     });
 
@@ -2083,7 +2092,7 @@ function renderPayroll() {
     const rowsHtml = entries.length ? entries.map(e => {
       const u = store.users.find(u=>u.id===e.userId);
       const hrs = parseFloat(e.hours||0);
-      const rate = getEffectiveRate(e.userId, e.location||e.site||'');
+      const rate = getRateForEntry(e);
       const pay = hrs * rate;
       return `<tr>
         <td><strong>${u?.name||'?'}</strong></td>
@@ -2147,8 +2156,9 @@ function exportPayroll() {
   entries.forEach(e => {
     const u = store.users.find(u=>u.id===e.userId);
     const hrs = parseFloat(e.hours||0);
-    const pay = hrs*(u?.rate||0);
-    csv += `"${u?.name}","${e.date}","${e.clockIn}","${e.clockOut||''}","${hrs.toFixed(2)}","${(u?.rate||0).toFixed(2)}","${pay.toFixed(2)}"\n`;
+    const rate = getRateForEntry(e);
+    const pay = hrs*rate;
+    csv += `"${u?.name}","${e.date}","${e.clockIn}","${e.clockOut||''}","${hrs.toFixed(2)}","${rate.toFixed(2)}","${pay.toFixed(2)}"\n`;
   });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
@@ -2324,10 +2334,11 @@ async function saveEmployee() {
     try {
       await sb('users','PATCH',updates,`?id=eq.${editingEmpId}`);
       Object.assign(u, updates);
-      await saveSiteRates(editingEmpId);
       closeModal('modal-add-employee');
       renderEmployeeList();
       showToast(`${name} updated`,'success');
+      // Site rates in background (don't block modal close)
+      saveSiteRates(editingEmpId).catch(err => console.warn('Site rates save error:', err));
     } catch(e) { showToast('Error: '+e.message,'error'); }
   } else {
     if (!pass) { showToast('Password is required','error'); return; }
@@ -2339,11 +2350,12 @@ async function saveEmployee() {
       const freshUsers = await sb('users','GET',null,'?select=*&order=name');
       store.users = freshUsers;
       const newUser = freshUsers.find(x=>x.email.toLowerCase()===email.toLowerCase());
-      if (newUser) await saveSiteRates(newUser.id);
       closeModal('modal-add-employee');
       renderEmployeeList();
       renderPayrollFilters();
       showToast(`${name} added`,'success');
+      // Site rates in background
+      if (newUser) saveSiteRates(newUser.id).catch(err => console.warn('Site rates save error:', err));
     } catch(e) { showToast('Error: '+e.message,'error'); }
   }
 }
@@ -2506,6 +2518,7 @@ async function saveAddEntry() {
   let diff = outMin - inMin;
   if (diff < 0) diff += 24*60; // overnight shift
   const hours = parseFloat((diff/60).toFixed(4));
+  const locked_rate = getEffectiveRate(userId, site || '');
 
   try {
     const saved = await sb('time_entries','POST',{
@@ -2515,6 +2528,7 @@ async function saveAddEntry() {
       clock_out: clockOut,
       hours,
       site: site || null,
+      locked_rate,
     });
     if (saved && saved[0]) {
       store.timeEntries.unshift({...saved[0], userId, clockIn, clockOut, location: site||null});
